@@ -214,10 +214,38 @@ async function handleLogin(e) {
     errorEl.classList.add('hidden');
 
     try {
+        if (!navigator.onLine) {
+            // === OFFLINE LOGIN: Check cached session ===
+            const cachedSession = localStorage.getItem('cached_session');
+            const cachedProfile = localStorage.getItem('cached_profile');
+            
+            if (!cachedSession || !cachedProfile) {
+                throw new Error('Offline login unavailable. Please connect to login for the first time.');
+            }
+            
+            const session = JSON.parse(cachedSession);
+            profile = JSON.parse(cachedProfile);
+            
+            // Basic credential check (email match only, no password verification offline)
+            if (session.user.email !== email) {
+                throw new Error('Email does not match cached session.');
+            }
+            
+            currentUser = session.user;
+            updateUIState();
+            showToast(`Welcome back, ${profile?.first_name || 'Reader'}! (Offline Mode)`, 'info');
+            return;
+        }
+
+        // === ONLINE LOGIN ===
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
 
         currentUser = data.user;
+        
+        // Cache session for offline login
+        localStorage.setItem('cached_session', JSON.stringify(data.session));
+        
         await fetchProfileAndLoadData();
         
         const role = (profile?.role || profile?.user_role || '').toLowerCase();
@@ -227,6 +255,8 @@ async function handleLogin(e) {
             await supabase.auth.signOut();
             currentUser = null;
             profile = null;
+            localStorage.removeItem('cached_session');
+            localStorage.removeItem('cached_profile');
             throw new Error('Access denied. Reader account required.');
         }
 
@@ -282,7 +312,8 @@ async function handleLogout() {
     await supabase.auth.signOut();
     currentUser = null;
     profile = null;
-    localStorage.removeItem('cached_profile'); // Clear profile cache
+    localStorage.removeItem('cached_profile');
+    localStorage.removeItem('cached_session'); // Clear session cache
     updateUIState();
 }
 
@@ -337,12 +368,43 @@ async function loadDashboard() {
                 .eq('reading_date', todayStr);
             todayBills = tb || [];
 
-            // 5. All Customers (for stats) - lightweight fetch
-            const { data: ac } = await supabase
+            // 5. ALL CUSTOMERS (FULL DATA) - Pre-load for offline use
+            const { data: fullCustomers } = await supabase
                 .from('customers')
-                .select('id, address')
+                .select(`
+                    *,
+                    billing:billing(
+                        id,
+                        current_reading,
+                        reading_date,
+                        billing_period,
+                        balance,
+                        consumption,
+                        due_date
+                    )
+                `)
                 .eq('status', 'active');
-            allCustomers = ac || [];
+            
+            // Process and cache ALL customers
+            const processedCustomers = (fullCustomers || []).map(c => {
+                const sortedBills = (c.billing || []).sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date));
+                const latestBilling = sortedBills[0];
+                const arrears = (c.billing || []).reduce((sum, b) => sum + (parseFloat(b.balance) || 0), 0);
+                
+                return {
+                    ...c,
+                    previous_reading: latestBilling ? latestBilling.current_reading : 0,
+                    arrears: arrears,
+                    history: sortedBills.slice(0, 12)
+                };
+            });
+            
+            // Cache ALL customers for offline use
+            await saveCache(STORE_CUSTOMERS, processedCustomers);
+            localStorage.setItem('sync_customers_time', Date.now());
+            
+            // Use lightweight version for dashboard stats
+            allCustomers = processedCustomers.map(c => ({ id: c.id, address: c.address }));
             
         } else {
             // === OFFLINE: Fetch from IndexedDB ===
@@ -606,7 +668,7 @@ function renderCustomerList(customers) {
             <div class="customer-card-condensed ${isTodaySaved ? 'is-saved' : ''}" id="cust-card-${c.id}">
                 <div class="card-header-toggle" onclick="toggleCustomerDetails(${c.id})">
                     <div style="display: flex; flex-direction: column;">
-                        <span class="customer-name">${c.first_name} ${c.last_name}</span>
+                        <span class="customer-name">${c.first_name} ${c.last_name} <span style="font-size: 11px; color: var(--text-muted); font-weight: 600; margin-left: 8px;">(${c.meter_number})</span></span>
                         ${isTodaySaved ? '<span style="font-size: 10px; color: #388E3C; font-weight: 700;">RECORDED TODAY</span>' : ''}
                     </div>
                     <div class="toggle-icon">
@@ -618,7 +680,6 @@ function renderCustomerList(customers) {
                 
                 <div class="card-details hidden" id="details-${c.id}">
                     <div class="detail-row">
-                        <span class="meter-pill-small">METER NO. ${c.meter_number}</span>
                         <div class="previous-reading-badge-small">
                             <span class="label">Prev:</span>
                             <span class="value">${c.previous_reading} m³</span>
@@ -838,6 +899,30 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
     }
 }
 
+function finalizeInput(customerId) {
+    const input = document.getElementById(`reading-${customerId}`);
+    const consCard = document.getElementById(`cons-card-${customerId}`);
+    const btn = input?.parentElement?.querySelector('.btn-save');
+    
+    if (input) input.disabled = true;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span style="color: white; font-weight: 700;">Synced now</span>
+        `;
+        btn.style.background = 'linear-gradient(135deg, #00B894 0%, #00A885 100%)';
+        btn.style.boxShadow = '0 4px 12px rgba(0, 184, 148, 0.4)';
+    }
+    
+    // Keep usage display as is
+    if (consCard) {
+        consCard.style.opacity = '0.7';
+    }
+}
+
 function calculateCharges(consumption, hasDiscount) {
     if (!systemSettings) return { base: 0, consumption: 0, total: 0 };
     const t1T = systemSettings.tier1_threshold || 10;
@@ -927,26 +1012,27 @@ window.showReceiptShortcut = (id) => {
     }
 };
 
-function finalizeInput(id) {
-    const input = document.getElementById(`reading-${id}`);
-    const btn = input?.parentElement?.nextElementSibling;
-    const cons = document.getElementById(`cons-${id}`);
-    const card = document.getElementById(`cust-card-${id}`);
-    
-    if (input) input.disabled = true;
-    if (btn) btn.disabled = true;
-    if (card) card.classList.add('is-saved'); 
-    if (cons) cons.innerHTML = 'Synced <span class="unit">now</span>';
-}
-
 async function saveOffline(reading) {
     try {
         await saveToIndexedDB(reading);
         await updateSyncCount();
         showToast('Offline Log Saved (IndexedDB)', 'info');
         finalizeInput(reading.p_customer_id);
-        const cons = document.getElementById(`cons-${reading.p_customer_id}`);
-        if (cons) cons.innerHTML = 'Saved <span class="unit">Offline</span>';
+        
+        // Update button to show "Saved Offline"
+        const input = document.getElementById(`reading-${reading.p_customer_id}`);
+        const btn = input?.parentElement?.querySelector('.btn-save');
+        if (btn) {
+            btn.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <span style="color: white; font-weight: 700;">Saved Offline</span>
+            `;
+            btn.style.background = 'linear-gradient(135deg, #FFB74D 0%, #FFA726 100%)';
+            btn.style.boxShadow = '0 4px 12px rgba(255, 183, 77, 0.4)';
+        }
+        
         loadDashboard();
     } catch (err) {
         console.error('IndexedDB Save Error:', err);
@@ -1033,13 +1119,27 @@ function updateUIState() {
 function showLoading(show) { loading.classList.toggle('hidden', !show); }
 
 function showToast(message, type = 'info') {
+    // Prevent duplicate toasts
+    const existingToasts = Array.from(toastContainer.children);
+    const isDuplicate = existingToasts.some(toast => toast.textContent.trim() === message);
+    
+    if (isDuplicate) {
+        // If duplicate exists, just shake the existing one
+        const existingToast = existingToasts.find(toast => toast.textContent.trim() === message);
+        existingToast.style.animation = 'none';
+        setTimeout(() => {
+            existingToast.style.animation = 'slideInRight 0.4s cubic-bezier(0.23, 1, 0.32, 1)';
+        }, 10);
+        return;
+    }
+    
     const toast = document.createElement('div');
     toast.className = `modern-toast toast-${type}`;
     toast.innerHTML = `<span>${message}</span>`;
     toastContainer.appendChild(toast);
     setTimeout(() => {
+        toast.style.transform = 'translateY(-100px)';
         toast.style.opacity = '0';
-        toast.style.transform = 'translateY(-20px)';
         setTimeout(() => toast.remove(), 400);
     }, 3000);
 }

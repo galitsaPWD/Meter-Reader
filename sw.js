@@ -1,8 +1,8 @@
-const CACHE_NAME = 'wb-reader-v14'; // Fixed scope error
+const CACHE_NAME = 'wb-reader-v25'; // Improved Synced Button Design
 const ASSETS = [
     './',
     './index.html',
-    './app.css?v=12',
+    './app.css?v=16',
     './app.js',
     './manifest.json',
     './supabase-config.js',
