@@ -348,6 +348,19 @@ section {
     color: #2E7D32;
 }
 
+.customer-card-condensed.is-pending {
+    background: #FFF3E0 !important; /* Soft orange */
+    border-color: #FFB74D;
+}
+
+.customer-card-condensed.is-pending .customer-name {
+    color: #E65100; /* Dark orange */
+}
+
+.customer-card-condensed.is-pending .toggle-icon {
+    color: #E65100;
+}
+
 .card-header-toggle {
     padding: 18px 24px;
     display: flex;

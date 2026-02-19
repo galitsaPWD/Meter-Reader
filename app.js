@@ -3,6 +3,7 @@ let profile = null;
 let assignedAreas = [];
 let systemSettings = null; 
 let isOnline = navigator.onLine;
+let isSyncInProgress = false;
 
 // IndexedDB Constants
 const DB_NAME = 'WBReaderDB';
@@ -93,6 +94,7 @@ async function getCache(storeName) {
 
 // Reading Section State
 let currentAreaCustomers = [];
+let currentAreaBarangays = []; // Track actual brgys of opened area
 let currentBarangay = 'All';
 
 // DOM Elements
@@ -425,9 +427,34 @@ async function loadDashboard() {
                 areas = cachedItems.filter(i => i.type === 'area');
             }
             
-            // Mock empty stats for offline
+            
+            // Load all customers for progress tracking
+            const cachedCustomers = await getCache(STORE_CUSTOMERS);
+            allCustomers = (cachedCustomers || []).map(c => ({ id: c.id, address: c.address, history: c.history || [] }));
+
+            // Calculate "Today's Bills" from local history + unsynced readings
+            const todayStr = new Date().toISOString().split('T')[0];
+            const offlineReadings = await getOfflineReadings();
+            
             todayBills = [];
-            allCustomers = []; 
+            
+            // 1. Add already synced readings (found in history)
+            allCustomers.forEach(c => {
+                const syncedToday = c.history.find(h => h.reading_date === todayStr);
+                if (syncedToday) {
+                    todayBills.push({ customer_id: c.id, consumption: syncedToday.consumption });
+                }
+            });
+            
+            // 2. Add unsynced readings (from offline queue)
+            offlineReadings.forEach(r => {
+                if (r.p_month_date === todayStr) {
+                    // Check for duplicates (unlikely unless logic allows, but safe)
+                    if (!todayBills.some(b => b.customer_id === r.p_customer_id)) {
+                        todayBills.push({ customer_id: r.p_customer_id, consumption: r.p_consumption });
+                    }
+                }
+            });
             
             if ((!areas || areas.length === 0) && navigator.onLine === false) {
                // Only warn if we truly have nothing and expected something
@@ -585,6 +612,7 @@ async function openArea(areaId, areaName, jumpToBrgy = 'All') {
             }
         }
 
+        currentAreaBarangays = barangays; // Save for refresh
         currentAreaCustomers = allCustomers.filter(c => {
             return barangays.some(brgy => (c.address || '').toLowerCase().includes(brgy.toLowerCase()));
         });
@@ -633,16 +661,19 @@ window.setBarangayFilter = (brgy, element) => {
     filterAndRenderCustomers();
 };
 
-function filterAndRenderCustomers() {
+async function filterAndRenderCustomers() {
+    const offlineReadings = await getOfflineReadings();
+    const todayStr = new Date().toISOString().split('T')[0];
+    
     const filtered = currentBarangay === 'All' 
         ? currentAreaCustomers 
         : currentAreaCustomers.filter(c => (c.address || '').toLowerCase().includes(currentBarangay.toLowerCase()));
 
     document.getElementById('area-meta').textContent = `${filtered.length} Customers found`;
-    renderCustomerList(filtered);
+    renderCustomerList(filtered, offlineReadings, todayStr);
 }
 
-function renderCustomerList(customers) {
+function renderCustomerList(customers, offlineReadings = [], todayStr = '') {
     const container = document.getElementById('customer-list');
     if (customers.length === 0) {
         container.innerHTML = `
@@ -662,14 +693,20 @@ function renderCustomerList(customers) {
     }
 
     container.innerHTML = customers.map(c => {
-        const isTodaySaved = c.history.some(b => b.reading_date === new Date().toISOString().split('T')[0]);
+        const isTodaySaved = c.history.some(b => b.reading_date === todayStr);
+        const isPending = offlineReadings.some(r => r.p_customer_id === c.id && r.p_month_date === todayStr);
         
+        const cardClass = isTodaySaved ? 'is-saved' : (isPending ? 'is-pending' : '');
+        const statusLabel = isTodaySaved 
+            ? '<span style="font-size: 10px; color: #388E3C; font-weight: 700;">RECORDED TODAY</span>' 
+            : (isPending ? '<span style="font-size: 10px; color: #E65100; font-weight: 700;">PENDING SYNC</span>' : '');
+
         return `
-            <div class="customer-card-condensed ${isTodaySaved ? 'is-saved' : ''}" id="cust-card-${c.id}">
+            <div class="customer-card-condensed ${cardClass}" id="cust-card-${c.id}">
                 <div class="card-header-toggle" onclick="toggleCustomerDetails(${c.id})">
                     <div style="display: flex; flex-direction: column;">
                         <span class="customer-name">${c.first_name} ${c.last_name} <span style="font-size: 11px; color: var(--text-muted); font-weight: 600; margin-left: 8px;">(${c.meter_number})</span></span>
-                        ${isTodaySaved ? '<span style="font-size: 10px; color: #388E3C; font-weight: 700;">RECORDED TODAY</span>' : ''}
+                        ${statusLabel}
                     </div>
                     <div class="toggle-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -842,6 +879,26 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
 
         if (!navigator.onLine) {
             await saveOffline(rpcPayload);
+            const customerForReceipt = currentAreaCustomers.find(c => c.id === customerId) || {};
+            const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
+            const penalty = totalDue * (penaltyPerc / 100);
+
+            showReceipt({
+                receiptNo: `OFF-${Date.now().toString().slice(-6)}`,
+                name: `${customerForReceipt.first_name || 'Customer'} ${customerForReceipt.last_name || ''}`,
+                barangay: extractBarangay(customerForReceipt.address),
+                meter: customerForReceipt.meter_number || 'N/A',
+                prev: prevReading,
+                pres: value,
+                cons: consumption,
+                charges: charges,
+                arrears: arrears,
+                total: totalDue,
+                penalty: penalty,
+                penaltyPerc: penaltyPerc,
+                due: dueDateStr,
+                readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader'
+            });
             return;
         }
 
@@ -849,36 +906,73 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
         
         if (error) {
             console.error('RPC Error:', error);
-            if (error.code === 'PGRST301' || !navigator.onLine) {
+            if (error.code === 'PGRST301') {
                 await saveOffline(rpcPayload);
+                const customerForReceipt = currentAreaCustomers.find(c => c.id === customerId) || {};
+                const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
+                const penalty = totalDue * (penaltyPerc / 100);
+
+                showReceipt({
+                    receiptNo: `OFF-${Date.now().toString().slice(-6)}`,
+                    name: `${customerForReceipt.first_name || 'Customer'} ${customerForReceipt.last_name || ''}`,
+                    barangay: extractBarangay(customerForReceipt.address),
+                    meter: customerForReceipt.meter_number || 'N/A',
+                    prev: prevReading,
+                    pres: value,
+                    cons: consumption,
+                    charges: charges,
+                    arrears: arrears,
+                    total: totalDue,
+                    penalty: penalty,
+                    penaltyPerc: penaltyPerc,
+                    due: dueDateStr,
+                    readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader'
+                });
                 return;
             }
             throw error;
         }
         
+        const currentCust = currentAreaCustomers.find(c => c.id === customerId);
+        if (currentCust) {
+            if (!currentCust.history) currentCust.history = [];
+            currentCust.history = currentCust.history.filter(h => h.reading_date !== readingDate);
+            currentCust.history.unshift({
+                reading_date: readingDate,
+                consumption: consumption,
+                current_reading: value,
+                balance: totalDue
+            });
+        }
+
         showToast('Success!', 'success');
         finalizeInput(customerId);
         
-        // Show Receipt Modal
-        const customer = currentAreaCustomers.find(c => c.id === customerId);
+        const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
+        const penalty = totalDue * (penaltyPerc / 100);
+
         showReceipt({
             receiptNo: `RCP-${new Date().getFullYear()}-${data.bill_id}`,
-            name: `${customer.first_name} ${customer.last_name}`,
-            meter: customer.meter_number,
+            name: `${currentCust.first_name} ${currentCust.last_name}`,
+            barangay: extractBarangay(currentCust.address),
+            meter: currentCust.meter_number,
             prev: prevReading,
             pres: value,
             cons: consumption,
-            charges: charges.total,
+            charges: charges,
             arrears: arrears,
             total: totalDue,
-            due: dueDateStr
+            penalty: penalty,
+            penaltyPerc: penaltyPerc,
+            due: dueDateStr,
+            readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader'
         });
 
-        loadDashboard();
+        await loadDashboard();
+        await filterAndRenderCustomers();
     } catch (err) {
         console.error('Submission Error:', err);
         showToast('Sync Failed - Saved Offline', 'warning');
-        // Final fallback to offline if catch block hit due to network timeout/error
         const rpcPayloadFallback = {
             p_customer_id: customerId,
             p_current_reading: value,
@@ -894,6 +988,26 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
             p_arrears: arrears
         };
         await saveOffline(rpcPayloadFallback);
+        const customerForReceipt = currentAreaCustomers.find(c => c.id === customerId) || {};
+        const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
+        const penalty = totalDue * (penaltyPerc / 100);
+
+         showReceipt({
+            receiptNo: `OFF-${Date.now().toString().slice(-6)}`,
+            name: `${customerForReceipt.first_name || 'Customer'} ${customerForReceipt.last_name || ''}`,
+            barangay: extractBarangay(customerForReceipt.address),
+            meter: customerForReceipt.meter_number || 'N/A',
+            prev: prevReading,
+            pres: value,
+            cons: consumption,
+            charges: charges,
+            arrears: arrears,
+            total: totalDue,
+            penalty: penalty,
+            penaltyPerc: penaltyPerc,
+            due: dueDateStr,
+            readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader'
+        });
     } finally {
         showLoading(false);
     }
@@ -921,6 +1035,21 @@ function finalizeInput(customerId) {
     if (consCard) {
         consCard.style.opacity = '0.7';
     }
+}
+
+function extractBarangay(address) {
+    if (!address) return 'N/A';
+    // Use the remembered brgys to find the matching one in the address
+    if (currentAreaBarangays && currentAreaBarangays.length > 0) {
+        const matchingBrgy = currentAreaBarangays.find(brgy => 
+            address.toLowerCase().includes(brgy.toLowerCase())
+        );
+        if (matchingBrgy) return matchingBrgy;
+    }
+    // Fallback: Return first segment before municipality if format is "Info, Brgy, City"
+    const parts = address.split(',').map(p => p.trim());
+    if (parts.length >= 2) return parts[parts.length - 2];
+    return parts[parts.length - 1] || 'N/A';
 }
 
 function calculateCharges(consumption, hasDiscount) {
@@ -964,23 +1093,48 @@ function calculateCharges(consumption, hasDiscount) {
 function showReceipt(data) {
     const body = document.getElementById('receipt-body');
     if (!body) return;
+    
+    // Extract Barangay (last part of address usually, or handle as needed)
+    const barangay = data.barangay || 'N/A';
+    const penaltyAmount = data.penalty || 0;
+    const amountAfterDue = data.total + penaltyAmount;
+
     body.innerHTML = `
         <div class="receipt-row"><span>Receipt No:</span> <strong>${data.receiptNo}</strong></div>
         <div class="receipt-row"><span>Date:</span> <span>${new Date().toLocaleDateString()}</span></div>
-        <div style="margin: 15px 0; font-weight: 700; border-top: 1px solid #eee; padding-top: 10px;">${data.name}</div>
+        <div style="margin: 15px 0 5px 0; font-weight: 700; border-top: 1px solid #eee; padding-top: 10px; font-size: 16px;">${data.name}</div>
+        <div style="font-size: 13px; color: #666; margin-bottom: 15px;">Brgy. ${barangay}</div>
+        
         <div class="receipt-row"><span>Meter No:</span> <span>${data.meter}</span></div>
         <div class="receipt-row"><span>Prev Reading:</span> <span>${data.prev}</span></div>
         <div class="receipt-row"><span>Pres Reading:</span> <span>${data.pres}</span></div>
         <div class="receipt-row"><span>Consumption:</span> <strong>${data.cons} m³</strong></div>
         
         <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+            <div class="receipt-row"><span>Arrears:</span> <span>₱${(data.arrears || 0).toFixed(2)}</span></div>
             <div class="receipt-row"><span>Current Bill:</span> <span>₱${(data.charges.total || 0).toFixed(2)}</span></div>
-            <div class="receipt-row"><span>Arrears:</span> <span>₱${data.arrears.toFixed(2)}</span></div>
-            <div class="receipt-row total"><span>TOTAL DUE:</span> <span>₱${data.total.toFixed(2)}</span></div>
+            <div class="receipt-row total" style="border-bottom: 1px dashed #ddd; padding-bottom: 10px; margin-bottom: 10px;">
+                <span>AMOUNT DUE:</span> 
+                <span>₱${data.total.toFixed(2)}</span>
+            </div>
+            
+            <div class="receipt-row" style="color: #666; font-size: 13px;">
+                <span>Penalty (${data.penaltyPerc}%):</span> 
+                <span>₱${penaltyAmount.toFixed(2)}</span>
+            </div>
+            <div class="receipt-row total" style="color: var(--primary); margin-top: 5px;">
+                <span>AFTER DUE DATE:</span> 
+                <span>₱${amountAfterDue.toFixed(2)}</span>
+            </div>
         </div>
         
         <div style="margin-top: 15px; background: #F5F5F5; padding: 10px; border-radius: 8px; text-align: center; font-size: 12px;">
             DUE DATE: <strong>${data.due}</strong>
+        </div>
+
+        <div style="margin-top: 25px; text-align: center; border-top: 1px solid #eee; padding-top: 15px;">
+            <div style="font-size: 12px; color: #888;">Meter Reader</div>
+            <div style="font-weight: 700; margin-top: 5px;">${data.readerName}</div>
         </div>
     `;
     document.getElementById('receipt-modal').classList.remove('hidden');
@@ -997,17 +1151,24 @@ window.showReceiptShortcut = (id) => {
     
     if (bill) {
         const charges = calculateCharges(bill.consumption, customer.has_discount);
+        const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
+        const penalty = bill.balance * (penaltyPerc / 100);
+        
         showReceipt({
             receiptNo: `RCP-${new Date().getFullYear()}-${bill.id || 'N/A'}`,
             name: `${customer.first_name} ${customer.last_name}`,
+            barangay: extractBarangay(customer.address),
             meter: customer.meter_number,
             prev: bill.current_reading - bill.consumption,
             pres: bill.current_reading,
             cons: bill.consumption,
             charges: charges,
-            arrears: customer.arrears - bill.balance, 
+            arrears: (customer.arrears || 0) - (bill.balance || 0), 
             total: bill.balance,
-            due: bill.due_date || 'N/A'
+            penalty: penalty,
+            penaltyPerc: penaltyPerc,
+            due: bill.due_date || 'N/A',
+            readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader'
         });
     }
 };
@@ -1033,7 +1194,10 @@ async function saveOffline(reading) {
             btn.style.boxShadow = '0 4px 12px rgba(255, 183, 77, 0.4)';
         }
         
-        loadDashboard();
+        await loadDashboard();
+        if (!readingSection.classList.contains('hidden')) {
+            await filterAndRenderCustomers();
+        }
     } catch (err) {
         console.error('IndexedDB Save Error:', err);
         showToast('Storage Error!', 'error');
@@ -1041,38 +1205,84 @@ async function saveOffline(reading) {
 }
 
 async function syncData() {
-    if (!navigator.onLine) return;
+    if (!navigator.onLine || isSyncInProgress) return;
+    
     const readings = await getOfflineReadings();
     if (readings.length === 0) return;
     
-    showToast(`Syncing ${readings.length} readings...`, 'info');
-    
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const item of readings) {
-        const { id, ...payload } = item;
-        const { error } = await supabase.rpc('generate_bill', payload);
+    try {
+        isSyncInProgress = true;
+        showLoading(true);
         
-        if (!error) {
-            await removeReadingFromDB(id);
-            successCount++;
-        } else {
-            console.error('Sync failed for item:', id, error);
-            failCount++;
-        }
-    }
+        // Stability Delay: Wait 1s for connection to fully stabilize
+        // This prevents the common "Failed to fetch" on immediate transition
+        await new Promise(r => setTimeout(r, 1000));
+        
+        showToast(`Syncing ${readings.length} readings...`, 'info');
+        
+        let successCount = 0;
+        let failCount = 0;
 
-    await updateSyncCount();
-    
-    if (failCount === 0) {
-        showToast(`Synced ${successCount} readings successfully!`, 'success');
-    } else {
-        showToast(`Synced ${successCount}, Failed ${failCount}.`, 'warning');
-    }
-    
-    if (successCount > 0) {
-        loadDashboard();
+        for (const item of readings) {
+            const { id, ...payload } = item;
+            
+            // Internal retry logic (3 attempts per reading)
+            let attempt = 0;
+            let currentError = null;
+            let success = false;
+
+            while (attempt < 3 && !success) {
+                attempt++;
+                try {
+                    const { error } = await supabase.rpc('generate_bill', payload);
+                    if (!error) {
+                        await removeReadingFromDB(id);
+                        successCount++;
+                        success = true;
+                    } else {
+                        currentError = error;
+                        // Don't retry if it's a structural error (e.g., bad data)
+                        if (error.code && !error.code.startsWith('5')) break; 
+                    }
+                } catch (e) {
+                    currentError = e;
+                    console.warn(`Sync attempt ${attempt} failed for ID ${id}:`, e);
+                    if (attempt < 3) await new Promise(r => setTimeout(r, 500)); // Brief pause before retry
+                }
+            }
+
+            if (!success) {
+                console.error(`Sync permanently failed for ID ${id}:`, currentError);
+                failCount++;
+            }
+        }
+
+        await updateSyncCount();
+        
+        if (failCount === 0) {
+            showToast(`Synced ${successCount} readings successfully!`, 'success');
+        } else {
+            showToast(`Synced ${successCount}, Failed ${failCount}.`, 'warning');
+        }
+        
+        if (successCount > 0) {
+            await loadDashboard();
+            if (!readingSection.classList.contains('hidden') && currentAreaBarangays.length > 0) {
+                const cachedCustomers = await getCache(STORE_CUSTOMERS);
+                if (cachedCustomers && cachedCustomers.length > 0) {
+                    currentAreaCustomers = cachedCustomers.filter(c => {
+                        return currentAreaBarangays.some(brgy => (c.address || '').toLowerCase().includes(brgy.toLowerCase()));
+                    });
+                }
+                await filterAndRenderCustomers();
+            }
+        }
+    } catch (err) {
+        console.error('Sync Process Error:', err);
+        showToast('Sync interrupted', 'error');
+    } finally {
+        isSyncInProgress = false;
+        showLoading(false);
     }
 }
 
