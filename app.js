@@ -1197,21 +1197,33 @@ window.directPrint = async () => {
     const data = window.lastReceiptData;
     if (!data) return;
 
-    showToast('Preparing high-quality print...', 'info');
+    showToast('Optimizing receipt...', 'info');
 
     try {
-        // Helper to get base64 logo
-        const getBase64 = async (url) => {
-            const resp = await fetch(url);
-            const blob = await resp.blob();
-            return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(blob);
+        // Helper to get optimized base64 logo (Resizes to max 200px width)
+        const getOptimizedLogo = async (url) => {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    // Constrain width to 180px for thermal printing
+                    const scale = 180 / img.width;
+                    canvas.width = 180;
+                    canvas.height = img.height * scale;
+
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    // Use JPEG with 0.7 quality to further reduce URI length
+                    resolve(canvas.toDataURL('image/jpeg', 0.7));
+                };
+                img.onerror = reject;
+                img.src = url;
             });
         };
 
-        const logoBase64 = await getBase64('assets/logo.png');
+        const logoBase64 = await getOptimizedLogo('assets/logo.png');
         const penaltyAmount = data.penalty || 0;
         const amountAfterDue = data.total + penaltyAmount;
 
@@ -1221,119 +1233,61 @@ window.directPrint = async () => {
 <head>
     <meta charset="UTF-8">
     <style>
-        body { 
-            width: 58mm; 
-            margin: 0; 
-            padding: 0; 
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 12px;
-            color: #000;
-            background: #fff;
-        }
-        .receipt-container {
-            width: 54mm;
-            padding: 2mm;
-            text-align: center;
-        }
-        .logo {
-            width: 30mm;
-            height: auto;
-            margin-bottom: 5px;
-        }
-        .header h3 { margin: 5px 0; font-size: 15px; text-transform: uppercase; }
-        .header p { margin: 2px 0; font-size: 11px; }
-        .divider { border-top: 1px dashed #000; margin: 8px 0; }
-        .row { display: flex; justify-content: space-between; margin: 2px 0; }
-        .row span:first-child { text-align: left; flex: 1; }
-        .row span:last-child { text-align: right; font-weight: bold; }
-        .customer-name { 
-            font-size: 14px; 
-            font-weight: bold; 
-            margin: 10px 0 2px 0; 
-            text-align: left;
-            border-top: 1px solid #eee;
-            padding-top: 5px;
-        }
-        .brgy { text-align: left; font-size: 11px; color: #555; margin-bottom: 10px; }
-        .total-row { 
-            font-size: 14px; 
-            font-weight: bold; 
-            border-top: 1px dashed #000; 
-            border-bottom: 1px dashed #000;
-            padding: 4px 0;
-            margin: 8px 0;
-        }
-        .due-date-box {
-            background: #f0f0f0;
-            padding: 5px;
-            margin: 10px 0;
-            font-weight: bold;
-        }
-        .footer { margin-top: 20px; font-size: 11px; }
-        .reader { font-weight: bold; margin-top: 5px; font-size: 13px; }
+        body { width: 58mm; margin: 0; padding: 0; font-family: monospace; font-size: 11px; color: #000; }
+        .container { width: 54mm; padding: 2mm; text-align: center; }
+        .logo { width: 35mm; margin-bottom: 5px; }
+        .header h3 { margin: 2px 0; font-size: 14px; text-transform: uppercase; }
+        .divider { border-top: 1px dashed #000; margin: 5px 0; }
+        .row { display: flex; justify-content: space-between; margin: 1px 0; }
+        .bold { font-weight: bold; }
+        .name { font-size: 13px; font-weight: bold; margin: 8px 0 2px 0; text-align: left; border-top: 1px solid #ccc; padding-top: 5px; }
+        .brgy { text-align: left; font-size: 10px; margin-bottom: 5px; }
+        .total-row { font-size: 13px; font-weight: bold; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 3px 0; margin: 5px 0; }
+        .due-box { background: #eee; padding: 4px; margin: 8px 0; font-weight: bold; font-size: 12px; }
+        .footer { margin-top: 15px; font-size: 10px; }
     </style>
 </head>
 <body>
-    <div class="receipt-container">
+    <div class="container">
         <div class="header">
             <img src="${logoBase64}" class="logo">
             <h3>Pulupandan Water District</h3>
-            <p>Digital Meter Receipt</p>
+            <p style="margin:0">Digital Meter Receipt</p>
         </div>
-        
         <div class="divider"></div>
-        
-        <div class="row"><span>Receipt No:</span> <span>${data.receiptNo}</span></div>
+        <div class="row"><span>Receipt:</span> <span>${data.receiptNo}</span></div>
         <div class="row"><span>Date:</span> <span>${new Date().toLocaleDateString()}</span></div>
-        
-        <div class="customer-name">${data.name}</div>
+        <div class="name">${data.name}</div>
         <div class="brgy">Brgy. ${data.barangay || 'N/A'}</div>
-        
-        <div class="row"><span>Meter No:</span> <span>${data.meter}</span></div>
-        <div class="row"><span>Prev Reading:</span> <span>${data.prev}</span></div>
-        <div class="row"><span>Pres Reading:</span> <span>${data.pres}</span></div>
-        <div class="row"><span>Consumption:</span> <span>${data.cons} m³</span></div>
-        
+        <div class="row"><span>Meter:</span> <span>${data.meter}</span></div>
+        <div class="row"><span>Prev:</span> <span>${data.prev}</span></div>
+        <div class="row"><span>Pres:</span> <span>${data.pres}</span></div>
+        <div class="row"><span>Cons:</span> <span>${data.cons} m3</span></div>
         <div class="divider"></div>
-        
         <div class="row"><span>Arrears:</span> <span>₱${(data.arrears || 0).toFixed(2)}</span></div>
-        <div class="row"><span>Current Bill:</span> <span>₱${(data.charges.total || 0).toFixed(2)}</span></div>
-        
-        <div class="total-row row">
-            <span>AMOUNT DUE:</span> 
-            <span>₱${data.total.toFixed(2)}</span>
-        </div>
-        
-        <div class="row" style="font-size: 11px;">
-            <span>Penalty (${data.penaltyPerc}%):</span> 
-            <span>₱${penaltyAmount.toFixed(2)}</span>
-        </div>
-        <div class="row" style="font-size: 13px; margin-top: 3px;">
-            <span>AFTER DUE DATE:</span> 
-            <span>₱${amountAfterDue.toFixed(2)}</span>
-        </div>
-        
-        <div class="due-date-box">
-            DUE DATE: ${data.due}
-        </div>
-        
+        <div class="row"><span>Current:</span> <span>₱${(data.charges.total || 0).toFixed(2)}</span></div>
+        <div class="total-row row"><span>AMOUNT DUE:</span> <span>₱${data.total.toFixed(2)}</span></div>
+        <div class="row"><span>Penalty (${data.penaltyPerc}%):</span> <span>₱${penaltyAmount.toFixed(2)}</span></div>
+        <div class="row bold"><span>AFTER DUE:</span> <span>₱${amountAfterDue.toFixed(2)}</span></div>
+        <div class="due-box">DUE DATE: ${data.due}</div>
         <div class="footer">
             <div>Meter Reader</div>
-            <div class="reader">${data.readerName}</div>
-            <div style="margin-top: 10px;">Thank you!</div>
+            <div class="bold" style="font-size:12px">${data.readerName}</div>
+            <div style="margin-top:5px">Thank you!</div>
         </div>
     </div>
 </body>
-</html>
-        `;
+</html>`;
 
-        // Send to RawBT using HTML base64 protocol
-        const base64Html = btoa(unescape(encodeURIComponent(html)));
+        // Safe conversion to base64
+        const utf8Bytes = new TextEncoder().encode(html);
+        const base64Html = btoa(String.fromCharCode(...utf8Bytes));
+
         window.location.href = "rawbt:data:text/html;base64," + base64Html;
         showToast('Sent to Printer!', 'success');
     } catch (err) {
         console.error('Print Error:', err);
-        showToast('Print failed (Logo error)', 'error');
+        showToast('Print optimization failed', 'error');
     }
 };
 
