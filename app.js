@@ -1,7 +1,7 @@
 let currentUser = null;
 let profile = null;
 let assignedAreas = [];
-let systemSettings = null; 
+let systemSettings = null;
 let isOnline = navigator.onLine;
 let isSyncInProgress = false;
 
@@ -113,17 +113,17 @@ const barangayTabsContainer = document.getElementById('barangay-tabs');
 function updateConnectionStatus() {
     const isOnline = navigator.onLine;
     const headerStatus = document.querySelector('.header-status');
-    
+
     if (headerStatus) {
         // Updated for High Contrast (Solid White Background)
         if (isOnline) {
             headerStatus.innerHTML = '<span style="display:inline-block; width:8px; height:8px; background:#4CAF50; border-radius:50%; margin-right:6px; flex-shrink:0; box-shadow: 0 0 5px rgba(76, 175, 80, 0.5);"></span>Online';
             headerStatus.className = 'header-status';
-            headerStatus.style.color = '#2E7D32'; 
+            headerStatus.style.color = '#2E7D32';
             headerStatus.style.setProperty('background', '#ffffff', 'important');
             headerStatus.style.border = 'none';
             headerStatus.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
-            
+
             if (window.triggerSync) window.triggerSync();
         } else {
             headerStatus.innerHTML = '<span style="display:inline-block; width:8px; height:8px; background:#757575; border-radius:50%; margin-right:6px; flex-shrink:0;"></span>Offline';
@@ -133,7 +133,7 @@ function updateConnectionStatus() {
             headerStatus.style.border = 'none';
             headerStatus.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
         }
-        
+
         // Common styles re-enforced
         headerStatus.style.display = 'flex';
         headerStatus.style.alignItems = 'center';
@@ -147,7 +147,7 @@ function updateConnectionStatus() {
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('🚀 WB Reader Premium Initializing...');
-    
+
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./sw.js').then(reg => {
             reg.onupdatefound = () => {
@@ -169,12 +169,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await checkSession();
     updateUIState();
-    
+
     // ... (rest of listeners)
     loginForm.addEventListener('submit', handleLogin);
     document.getElementById('logoutBtn').addEventListener('click', handleLogout);
     document.getElementById('refreshBtn').addEventListener('click', loadDashboard);
-    
+
     window.triggerSync = async () => {
         const readings = await getOfflineReadings();
         if (readings.length > 0) syncData();
@@ -184,7 +184,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('sync-card').addEventListener('click', (e) => {
         if (e.target.id !== 'sync-btn-action') window.triggerSync();
     });
-    
+
     syncBtnAction.addEventListener('click', (e) => {
         e.stopPropagation();
         window.triggerSync();
@@ -220,19 +220,19 @@ async function handleLogin(e) {
             // === OFFLINE LOGIN: Check cached session ===
             const cachedSession = localStorage.getItem('cached_session');
             const cachedProfile = localStorage.getItem('cached_profile');
-            
+
             if (!cachedSession || !cachedProfile) {
                 throw new Error('Offline login unavailable. Please connect to login for the first time.');
             }
-            
+
             const session = JSON.parse(cachedSession);
             profile = JSON.parse(cachedProfile);
-            
+
             // Basic credential check (email match only, no password verification offline)
             if (session.user.email !== email) {
                 throw new Error('Email does not match cached session.');
             }
-            
+
             currentUser = session.user;
             updateUIState();
             showToast(`Welcome back, ${profile?.first_name || 'Reader'}! (Offline Mode)`, 'info');
@@ -244,15 +244,15 @@ async function handleLogin(e) {
         if (error) throw error;
 
         currentUser = data.user;
-        
+
         // Cache session for offline login
         localStorage.setItem('cached_session', JSON.stringify(data.session));
-        
+
         await fetchProfileAndLoadData();
-        
+
         const role = (profile?.role || profile?.user_role || '').toLowerCase();
         const isStaff = !!(profile?.auth_uid || profile?.username);
-        
+
         if (role !== 'reader' && role !== 'admin' && !isStaff) {
             await supabase.auth.signOut();
             currentUser = null;
@@ -284,10 +284,10 @@ async function fetchProfileAndLoadData() {
                 const { data: profileData } = await supabase.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
                 profile = profileData || { role: 'admin', first_name: currentUser.email.split('@')[0] };
             }
-            
+
             // Cache Profile for Offline Use
             localStorage.setItem('cached_profile', JSON.stringify(profile));
-        
+
         } else {
             // === OFFLINE: Load from Cache ===
             console.log('⚠️ Offline: Loading profile from cache...');
@@ -330,7 +330,7 @@ async function loadDashboard() {
 
         if (navigator.onLine) {
             // === ONLINE: Fetch from Supabase & Cache ===
-            
+
             // 1. System Settings
             const { data: s } = await supabase.from('system_settings').select('*').single();
             settings = s;
@@ -357,7 +357,7 @@ async function loadDashboard() {
             const { data: a, error } = await query;
             if (error) throw error;
             areas = a || [];
-            
+
             // Cache Areas
             await saveCache(STORE_AREAS, areas.map(area => ({ ...area, type: 'area' })));
             localStorage.setItem('sync_areas_time', Date.now()); // Mark sync time
@@ -386,13 +386,13 @@ async function loadDashboard() {
                     )
                 `)
                 .eq('status', 'active');
-            
+
             // Process and cache ALL customers
             const processedCustomers = (fullCustomers || []).map(c => {
                 const sortedBills = (c.billing || []).sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date));
                 const latestBilling = sortedBills[0];
                 const arrears = (c.billing || []).reduce((sum, b) => sum + (parseFloat(b.balance) || 0), 0);
-                
+
                 return {
                     ...c,
                     previous_reading: latestBilling ? latestBilling.current_reading : 0,
@@ -400,22 +400,22 @@ async function loadDashboard() {
                     history: sortedBills.slice(0, 12)
                 };
             });
-            
+
             // Cache ALL customers for offline use
             await saveCache(STORE_CUSTOMERS, processedCustomers);
             localStorage.setItem('sync_customers_time', Date.now());
-            
+
             // Use lightweight version for dashboard stats
             allCustomers = processedCustomers.map(c => ({ id: c.id, address: c.address }));
-            
+
         } else {
             // === OFFLINE: Fetch from IndexedDB ===
             console.log('⚠️ Offline: Loading dashboard from cache...');
-            
+
             const lastSync = localStorage.getItem('sync_areas_time');
             const startOfDay = new Date();
-            startOfDay.setHours(0,0,0,0);
-            
+            startOfDay.setHours(0, 0, 0, 0);
+
             if (!lastSync || new Date(parseInt(lastSync)) < startOfDay) {
                 console.warn('Cache expired (from yesterday or older). Ignoring.');
                 areas = [];
@@ -426,8 +426,8 @@ async function loadDashboard() {
                 settings = cachedItems.find(i => i.id === 'settings');
                 areas = cachedItems.filter(i => i.type === 'area');
             }
-            
-            
+
+
             // Load all customers for progress tracking
             const cachedCustomers = await getCache(STORE_CUSTOMERS);
             allCustomers = (cachedCustomers || []).map(c => ({ id: c.id, address: c.address, history: c.history || [] }));
@@ -435,9 +435,9 @@ async function loadDashboard() {
             // Calculate "Today's Bills" from local history + unsynced readings
             const todayStr = new Date().toISOString().split('T')[0];
             const offlineReadings = await getOfflineReadings();
-            
+
             todayBills = [];
-            
+
             // 1. Add already synced readings (found in history)
             allCustomers.forEach(c => {
                 const syncedToday = c.history.find(h => h.reading_date === todayStr);
@@ -445,7 +445,7 @@ async function loadDashboard() {
                     todayBills.push({ customer_id: c.id, consumption: syncedToday.consumption });
                 }
             });
-            
+
             // 2. Add unsynced readings (from offline queue)
             offlineReadings.forEach(r => {
                 if (r.p_month_date === todayStr) {
@@ -455,10 +455,10 @@ async function loadDashboard() {
                     }
                 }
             });
-            
+
             if ((!areas || areas.length === 0) && navigator.onLine === false) {
-               // Only warn if we truly have nothing and expected something
-               // handled above by toast
+                // Only warn if we truly have nothing and expected something
+                // handled above by toast
             }
         }
 
@@ -467,15 +467,15 @@ async function loadDashboard() {
 
         renderBarangayDashboard(assignedAreas, todayBills, allCustomers);
         updateSyncCount();
-        
+
         // Calculate Totals (Include offline actions)
         const todayConsumption = todayBills.reduce((sum, b) => sum + (parseFloat(b.consumption) || 0), 0);
         const offlineItems = await getOfflineReadings();
         const offlineTotal = offlineItems.reduce((sum, r) => sum + (parseFloat(r.p_consumption) || 0), 0);
-        
+
         totalReadingsDisplay.textContent = `${(todayConsumption + offlineTotal).toFixed(1)} m³`;
         totalReadingsDisplay.nextElementSibling.textContent = 'RECORDED TODAY';
-        
+
     } catch (err) {
         showToast('Dashboard Load Error', 'error');
         console.error('Loader Dashboard Error:', err);
@@ -542,14 +542,14 @@ async function openArea(areaId, areaName, jumpToBrgy = 'All') {
     document.getElementById('area-name-display').textContent = jumpToBrgy !== 'All' ? jumpToBrgy : areaName;
     dashboardSection.classList.add('hidden');
     readingSection.classList.remove('hidden');
-    
+
     showLoading(true);
     try {
         const area = assignedAreas.find(a => a.id === areaId);
         const barangays = area.barangays || [];
-        
+
         renderBarangayTabs(barangays);
-        
+
         let allCustomers = [];
 
         if (navigator.onLine) {
@@ -569,15 +569,15 @@ async function openArea(areaId, areaName, jumpToBrgy = 'All') {
                     )
                 `)
                 .eq('status', 'active');
-            
+
             if (error) throw error;
-            
+
             // Process customers immediately
             allCustomers = (data || []).map(c => {
                 const sortedBills = (c.billing || []).sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date));
                 const latestBilling = sortedBills[0];
                 const arrears = (c.billing || []).reduce((sum, b) => sum + (parseFloat(b.balance) || 0), 0);
-                
+
                 return {
                     ...c,
                     previous_reading: latestBilling ? latestBilling.current_reading : 0,
@@ -594,11 +594,11 @@ async function openArea(areaId, areaName, jumpToBrgy = 'All') {
         } else {
             // === OFFLINE: Fetch from Cache ===
             console.log('⚠️ Offline: Loading customers from cache...');
-            
+
             const lastSync = localStorage.getItem('sync_customers_time');
             const startOfDay = new Date();
-            startOfDay.setHours(0,0,0,0);
-            
+            startOfDay.setHours(0, 0, 0, 0);
+
             if (!lastSync || new Date(parseInt(lastSync)) < startOfDay) {
                 console.warn('Customer cache expired. Ignoring.');
                 allCustomers = [];
@@ -606,7 +606,7 @@ async function openArea(areaId, areaName, jumpToBrgy = 'All') {
             } else {
                 allCustomers = await getCache(STORE_CUSTOMERS);
             }
-            
+
             if (!allCustomers || allCustomers.length === 0) {
                 // showToast('No offline customers found. Go online to sync first.', 'warning'); // Duplicate toast
             }
@@ -618,7 +618,7 @@ async function openArea(areaId, areaName, jumpToBrgy = 'All') {
         });
 
         currentBarangay = jumpToBrgy;
-        
+
         // Update tab active state
         setTimeout(() => {
             const tabs = document.querySelectorAll('.brgy-tab');
@@ -664,9 +664,9 @@ window.setBarangayFilter = (brgy, element) => {
 async function filterAndRenderCustomers() {
     const offlineReadings = await getOfflineReadings();
     const todayStr = new Date().toISOString().split('T')[0];
-    
-    const filtered = currentBarangay === 'All' 
-        ? currentAreaCustomers 
+
+    const filtered = currentBarangay === 'All'
+        ? currentAreaCustomers
         : currentAreaCustomers.filter(c => (c.address || '').toLowerCase().includes(currentBarangay.toLowerCase()));
 
     document.getElementById('area-meta').textContent = `${filtered.length} Customers found`;
@@ -695,10 +695,10 @@ function renderCustomerList(customers, offlineReadings = [], todayStr = '') {
     container.innerHTML = customers.map(c => {
         const isTodaySaved = c.history.some(b => b.reading_date === todayStr);
         const isPending = offlineReadings.some(r => r.p_customer_id === c.id && r.p_month_date === todayStr);
-        
+
         const cardClass = isTodaySaved ? 'is-saved' : (isPending ? 'is-pending' : '');
-        const statusLabel = isTodaySaved 
-            ? '<span style="font-size: 10px; color: #388E3C; font-weight: 700;">RECORDED TODAY</span>' 
+        const statusLabel = isTodaySaved
+            ? '<span style="font-size: 10px; color: #388E3C; font-weight: 700;">RECORDED TODAY</span>'
             : (isPending ? '<span style="font-size: 10px; color: #E65100; font-weight: 700;">PENDING SYNC</span>' : '');
 
         return `
@@ -787,15 +787,15 @@ window.updateConsumption = (id, prev) => {
     const anomalyEl = document.getElementById(`anomaly-${id}`);
     const current = parseFloat(input.value) || 0;
     const cons = current - prev;
-    
+
     display.innerHTML = `${Math.max(0, cons).toFixed(2)} <span class="unit">m³</span>`;
-    
+
     // Anomaly Flagging (Spike detection)
     if (cons > 0 && prev > 0) {
         const customer = currentAreaCustomers.find(c => c.id === id);
         const history = customer?.history || [];
         const avg = history.length > 0 ? history.reduce((s, h) => s + h.consumption, 0) / history.length : 10;
-        
+
         if (cons > avg * 2) {
             anomalyEl.innerHTML = `
                 <div class="anomaly-flag">
@@ -809,7 +809,7 @@ window.updateConsumption = (id, prev) => {
             anomalyEl.classList.remove('hidden');
             display.style.color = 'var(--error)';
         } else if (cons < 0) {
-             anomalyEl.innerHTML = `
+            anomalyEl.innerHTML = `
                 <div class="anomaly-flag" style="background:#FFEBEE; color:#C62828;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -818,7 +818,7 @@ window.updateConsumption = (id, prev) => {
                     </svg>
                     ERROR: Below previous reading
                 </div>`;
-             anomalyEl.classList.remove('hidden');
+            anomalyEl.classList.remove('hidden');
         } else {
             anomalyEl.classList.add('hidden');
             display.style.color = '';
@@ -826,7 +826,7 @@ window.updateConsumption = (id, prev) => {
     } else {
         anomalyEl.classList.add('hidden');
     }
-    
+
     const btn = input.parentElement?.nextElementSibling;
     if (btn) {
         if (current >= prev) {
@@ -853,7 +853,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
     const now = new Date();
     const billingPeriod = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
     const readingDate = now.toISOString().split('T')[0];
-    
+
     // Calculate Amount
     let charges = calculateCharges(consumption, hasDiscount);
     let totalDue = charges.total + arrears;
@@ -906,7 +906,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
         }
 
         const { data, error } = await supabase.rpc('generate_bill', rpcPayload);
-        
+
         if (error) {
             console.error('RPC Error:', error);
             if (error.code === 'PGRST301') {
@@ -935,7 +935,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
             }
             throw error;
         }
-        
+
         const currentCust = currentAreaCustomers.find(c => c.id === customerId);
         if (currentCust) {
             if (!currentCust.history) currentCust.history = [];
@@ -950,7 +950,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
 
         showToast('Success!', 'success');
         finalizeInput(customerId);
-        
+
         const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
         const penalty = totalDue * (penaltyPerc / 100);
 
@@ -995,7 +995,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
         const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
         const penalty = totalDue * (penaltyPerc / 100);
 
-         showReceipt({
+        showReceipt({
             receiptNo: `OFF-${Date.now().toString().slice(-6)}`,
             name: `${customerForReceipt.first_name || 'Customer'} ${customerForReceipt.last_name || ''}`,
             barangay: extractBarangay(customerForReceipt.address),
@@ -1020,7 +1020,7 @@ function finalizeInput(customerId) {
     const input = document.getElementById(`reading-${customerId}`);
     const consCard = document.getElementById(`cons-card-${customerId}`);
     const btn = input?.parentElement?.querySelector('.btn-save');
-    
+
     if (input) input.disabled = true;
     if (btn) {
         btn.disabled = true;
@@ -1033,7 +1033,7 @@ function finalizeInput(customerId) {
         btn.style.background = 'linear-gradient(135deg, #00B894 0%, #00A885 100%)';
         btn.style.boxShadow = '0 4px 12px rgba(0, 184, 148, 0.4)';
     }
-    
+
     // Keep usage display as is
     if (consCard) {
         consCard.style.opacity = '0.7';
@@ -1044,7 +1044,7 @@ function extractBarangay(address) {
     if (!address) return 'N/A';
     // Use the remembered brgys to find the matching one in the address
     if (currentAreaBarangays && currentAreaBarangays.length > 0) {
-        const matchingBrgy = currentAreaBarangays.find(brgy => 
+        const matchingBrgy = currentAreaBarangays.find(brgy =>
             address.toLowerCase().includes(brgy.toLowerCase())
         );
         if (matchingBrgy) return matchingBrgy;
@@ -1077,14 +1077,14 @@ function calculateCharges(consumption, hasDiscount) {
             }
         }
     }
-    
+
     let total = baseRate + consumptionCharge;
     let netTotal = total;
     if (hasDiscount) {
         const discountP = parseFloat(systemSettings.discount_percentage || 20) / 100;
         netTotal -= (total * discountP);
     }
-    
+
     return {
         base: baseRate,
         consumption: consumptionCharge,
@@ -1096,7 +1096,7 @@ function calculateCharges(consumption, hasDiscount) {
 function showReceipt(data) {
     const body = document.getElementById('receipt-body');
     if (!body) return;
-    
+
     // Extract Barangay (last part of address usually, or handle as needed)
     const barangay = data.barangay || 'N/A';
     const penaltyAmount = data.penalty || 0;
@@ -1141,7 +1141,96 @@ function showReceipt(data) {
         </div>
     `;
     document.getElementById('receipt-modal').classList.remove('hidden');
+
+    // Store data for shareReceipt
+    window.lastReceiptData = data;
 }
+
+window.shareReceipt = async () => {
+    const data = window.lastReceiptData;
+    if (!data) return;
+
+    const text = `
+PULUPANDAN WATER DISTRICT
+Digital Meter Receipt
+---------------------------
+Receipt: ${data.receiptNo}
+Date: ${new Date().toLocaleDateString()}
+Customer: ${data.name}
+Brgy: ${data.barangay || 'N/A'}
+Meter: ${data.meter}
+---------------------------
+Prev: ${data.prev}
+Pres: ${data.pres}
+Cons: ${data.cons} m³
+---------------------------
+Arrears: P${(data.arrears || 0).toFixed(2)}
+Current: P${(data.charges.total || 0).toFixed(2)}
+TOTAL DUE: P${data.total.toFixed(2)}
+---------------------------
+Penalty: P${(data.penalty || 0).toFixed(2)}
+After Due: P${(data.total + (data.penalty || 0)).toFixed(2)}
+DUE DATE: ${data.due}
+---------------------------
+Reader: ${data.readerName}
+Thank you!
+    `.trim();
+
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'Meter Receipt',
+                text: text
+            });
+            showToast('Shared to printer app', 'success');
+        } catch (err) {
+            console.error('Share Error:', err);
+        }
+    } else {
+        // Fallback: Copy to clipboard
+        navigator.clipboard.writeText(text);
+        showToast('Receipt copied (paste in printer app)', 'info');
+    }
+};
+
+window.directPrint = () => {
+    const data = window.lastReceiptData;
+    if (!data) return;
+
+    // ESC/POS-like formatting for RawBT
+    const text = `
+${String.fromCharCode(27)}${String.fromCharCode(97)}${String.fromCharCode(1)}PULUPANDAN WATER DISTRICT
+Digital Meter Receipt
+---------------------------
+Receipt: ${data.receiptNo}
+Date: ${new Date().toLocaleDateString()}
+Customer: ${data.name}
+Brgy: ${data.barangay || 'N/A'}
+Meter: ${data.meter}
+---------------------------
+Prev: ${data.prev}
+Pres: ${data.pres}
+Cons: ${data.cons} m³
+---------------------------
+Arrears: P${(data.arrears || 0).toFixed(2)}
+Current: P${(data.charges.total || 0).toFixed(2)}
+TOTAL DUE: P${data.total.toFixed(2)}
+---------------------------
+Penalty: P${(data.penalty || 0).toFixed(2)}
+After Due: P${(data.total + (data.penalty || 0)).toFixed(2)}
+DUE DATE: ${data.due}
+---------------------------
+Reader: ${data.readerName}
+Thank you!
+
+
+`.trim();
+
+    // RawBT Intent URL
+    const url = "rawbt:" + encodeURIComponent(text);
+    window.location.href = url;
+    showToast('Sent to RawBT', 'success');
+};
 
 window.closeReceipt = () => {
     document.getElementById('receipt-modal').classList.add('hidden');
@@ -1151,12 +1240,12 @@ window.showReceiptShortcut = (id) => {
     const customer = currentAreaCustomers.find(c => c.id === id);
     const todayStr = new Date().toISOString().split('T')[0];
     const bill = customer.history.find(b => b.reading_date === todayStr);
-    
+
     if (bill) {
         const charges = calculateCharges(bill.consumption, customer.has_discount);
         const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
         const penalty = bill.balance * (penaltyPerc / 100);
-        
+
         showReceipt({
             receiptNo: `RCP-${new Date().getFullYear()}-${bill.id || 'N/A'}`,
             name: `${customer.first_name} ${customer.last_name}`,
@@ -1166,7 +1255,7 @@ window.showReceiptShortcut = (id) => {
             pres: bill.current_reading,
             cons: bill.consumption,
             charges: charges,
-            arrears: (customer.arrears || 0) - (bill.balance || 0), 
+            arrears: (customer.arrears || 0) - (bill.balance || 0),
             total: bill.balance,
             penalty: penalty,
             penaltyPerc: penaltyPerc,
@@ -1182,7 +1271,7 @@ async function saveOffline(reading) {
         await updateSyncCount();
         showToast('Offline Log Saved (IndexedDB)', 'info');
         finalizeInput(reading.p_customer_id);
-        
+
         // Update button to show "Saved Offline"
         const input = document.getElementById(`reading-${reading.p_customer_id}`);
         const btn = input?.parentElement?.querySelector('.btn-save');
@@ -1196,7 +1285,7 @@ async function saveOffline(reading) {
             btn.style.background = 'linear-gradient(135deg, #FFB74D 0%, #FFA726 100%)';
             btn.style.boxShadow = '0 4px 12px rgba(255, 183, 77, 0.4)';
         }
-        
+
         await loadDashboard();
         if (!readingSection.classList.contains('hidden')) {
             await filterAndRenderCustomers();
@@ -1209,26 +1298,26 @@ async function saveOffline(reading) {
 
 async function syncData() {
     if (!navigator.onLine || isSyncInProgress) return;
-    
+
     const readings = await getOfflineReadings();
     if (readings.length === 0) return;
-    
+
     try {
         isSyncInProgress = true;
         showLoading(true);
-        
+
         // Stability Delay: Wait 1s for connection to fully stabilize
         // This prevents the common "Failed to fetch" on immediate transition
         await new Promise(r => setTimeout(r, 1000));
-        
+
         showToast(`Syncing ${readings.length} readings...`, 'info');
-        
+
         let successCount = 0;
         let failCount = 0;
 
         for (const item of readings) {
             const { id, ...payload } = item;
-            
+
             // Internal retry logic (3 attempts per reading)
             let attempt = 0;
             let currentError = null;
@@ -1245,7 +1334,7 @@ async function syncData() {
                     } else {
                         currentError = error;
                         // Don't retry if it's a structural error (e.g., bad data)
-                        if (error.code && !error.code.startsWith('5')) break; 
+                        if (error.code && !error.code.startsWith('5')) break;
                     }
                 } catch (e) {
                     currentError = e;
@@ -1261,13 +1350,13 @@ async function syncData() {
         }
 
         await updateSyncCount();
-        
+
         if (failCount === 0) {
             showToast(`Synced ${successCount} readings successfully!`, 'success');
         } else {
             showToast(`Synced ${successCount}, Failed ${failCount}.`, 'warning');
         }
-        
+
         if (successCount > 0) {
             await loadDashboard();
             if (!readingSection.classList.contains('hidden') && currentAreaBarangays.length > 0) {
@@ -1292,20 +1381,20 @@ async function syncData() {
 async function updateSyncCount() {
     const readings = await getOfflineReadings();
     const count = readings.length;
-    
+
     // Update dashboard counter
     if (pendingSyncCount) pendingSyncCount.innerText = count;
     if (syncBtnAction) syncBtnAction.classList.toggle('hidden', count === 0);
-    
+
     // Update header indicator
     const pill = document.getElementById('pending-sync-pill');
     if (pill) {
-         if (count > 0) {
-             pill.classList.remove('hidden');
-             pill.innerText = `${count} Pending`;
-         } else {
-             pill.classList.add('hidden');
-         }
+        if (count > 0) {
+            pill.classList.remove('hidden');
+            pill.innerText = `${count} Pending`;
+        } else {
+            pill.classList.add('hidden');
+        }
     }
 }
 
@@ -1335,7 +1424,7 @@ function showToast(message, type = 'info') {
     // Prevent duplicate toasts
     const existingToasts = Array.from(toastContainer.children);
     const isDuplicate = existingToasts.some(toast => toast.textContent.trim() === message);
-    
+
     if (isDuplicate) {
         // If duplicate exists, just shake the existing one
         const existingToast = existingToasts.find(toast => toast.textContent.trim() === message);
@@ -1345,7 +1434,7 @@ function showToast(message, type = 'info') {
         }, 10);
         return;
     }
-    
+
     const toast = document.createElement('div');
     toast.className = `modern-toast toast-${type}`;
     toast.innerHTML = `<span>${message}</span>`;
