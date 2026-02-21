@@ -1193,102 +1193,51 @@ Thank you!
     }
 };
 
-window.directPrint = async () => {
+window.directPrint = () => {
     const data = window.lastReceiptData;
     if (!data) return;
 
-    showToast('Optimizing receipt...', 'info');
+    // Use high-fidelity text formatting that mimics Design 2 more closely
+    const penaltyAmount = data.penalty || 0;
+    const amountAfterDue = data.total + penaltyAmount;
 
-    try {
-        // Helper to get optimized base64 logo (Resizes to max 200px width)
-        const getOptimizedLogo = async (url) => {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
+    const text = `
+    PULUPANDAN WATER DISTRICT
+      Digital Meter Receipt
+================================
+RECEIPT: ${data.receiptNo}
+DATE:    ${new Date().toLocaleDateString()}
+--------------------------------
+${data.name.toUpperCase()}
+Brgy. ${data.barangay || 'N/A'}
+--------------------------------
+METER NO:      ${data.meter}
+PREV READING:  ${data.prev}
+PRES READING:  ${data.pres}
+CONSUMPTION:   ${data.cons} m3
+--------------------------------
+ARREARS:       P${(data.arrears || 0).toFixed(2)}
+CURRENT BILL:  P${(data.charges.total || 0).toFixed(2)}
+--------------------------------
+AMOUNT DUE:    P${data.total.toFixed(2)}
+--------------------------------
+PENALTY (${data.penaltyPerc}%): P${penaltyAmount.toFixed(2)}
+AFTER DUE:     P${amountAfterDue.toFixed(2)}
+--------------------------------
+DUE DATE: ${data.due}
+================================
+       Meter Reader:
+       ${data.readerName}
+       
+          Thank you!
 
-                    // Constrain width to 180px for thermal printing
-                    const scale = 180 / img.width;
-                    canvas.width = 180;
-                    canvas.height = img.height * scale;
 
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    // Use JPEG with 0.7 quality to further reduce URI length
-                    resolve(canvas.toDataURL('image/jpeg', 0.7));
-                };
-                img.onerror = reject;
-                img.src = url;
-            });
-        };
+`.trim();
 
-        const logoBase64 = await getOptimizedLogo('assets/logo.png');
-        const penaltyAmount = data.penalty || 0;
-        const amountAfterDue = data.total + penaltyAmount;
-
-        const html = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { width: 58mm; margin: 0; padding: 0; font-family: monospace; font-size: 11px; color: #000; }
-        .container { width: 54mm; padding: 2mm; text-align: center; }
-        .logo { width: 35mm; margin-bottom: 5px; }
-        .header h3 { margin: 2px 0; font-size: 14px; text-transform: uppercase; }
-        .divider { border-top: 1px dashed #000; margin: 5px 0; }
-        .row { display: flex; justify-content: space-between; margin: 1px 0; }
-        .bold { font-weight: bold; }
-        .name { font-size: 13px; font-weight: bold; margin: 8px 0 2px 0; text-align: left; border-top: 1px solid #ccc; padding-top: 5px; }
-        .brgy { text-align: left; font-size: 10px; margin-bottom: 5px; }
-        .total-row { font-size: 13px; font-weight: bold; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 3px 0; margin: 5px 0; }
-        .due-box { background: #eee; padding: 4px; margin: 8px 0; font-weight: bold; font-size: 12px; }
-        .footer { margin-top: 15px; font-size: 10px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <img src="${logoBase64}" class="logo">
-            <h3>Pulupandan Water District</h3>
-            <p style="margin:0">Digital Meter Receipt</p>
-        </div>
-        <div class="divider"></div>
-        <div class="row"><span>Receipt:</span> <span>${data.receiptNo}</span></div>
-        <div class="row"><span>Date:</span> <span>${new Date().toLocaleDateString()}</span></div>
-        <div class="name">${data.name}</div>
-        <div class="brgy">Brgy. ${data.barangay || 'N/A'}</div>
-        <div class="row"><span>Meter:</span> <span>${data.meter}</span></div>
-        <div class="row"><span>Prev:</span> <span>${data.prev}</span></div>
-        <div class="row"><span>Pres:</span> <span>${data.pres}</span></div>
-        <div class="row"><span>Cons:</span> <span>${data.cons} m3</span></div>
-        <div class="divider"></div>
-        <div class="row"><span>Arrears:</span> <span>₱${(data.arrears || 0).toFixed(2)}</span></div>
-        <div class="row"><span>Current:</span> <span>₱${(data.charges.total || 0).toFixed(2)}</span></div>
-        <div class="total-row row"><span>AMOUNT DUE:</span> <span>₱${data.total.toFixed(2)}</span></div>
-        <div class="row"><span>Penalty (${data.penaltyPerc}%):</span> <span>₱${penaltyAmount.toFixed(2)}</span></div>
-        <div class="row bold"><span>AFTER DUE:</span> <span>₱${amountAfterDue.toFixed(2)}</span></div>
-        <div class="due-box">DUE DATE: ${data.due}</div>
-        <div class="footer">
-            <div>Meter Reader</div>
-            <div class="bold" style="font-size:12px">${data.readerName}</div>
-            <div style="margin-top:5px">Thank you!</div>
-        </div>
-    </div>
-</body>
-</html>`;
-
-        // Safe conversion to base64
-        const utf8Bytes = new TextEncoder().encode(html);
-        const base64Html = btoa(String.fromCharCode(...utf8Bytes));
-
-        window.location.href = "rawbt:data:text/html;base64," + base64Html;
-        showToast('Sent to Printer!', 'success');
-    } catch (err) {
-        console.error('Print Error:', err);
-        showToast('Print optimization failed', 'error');
-    }
+    // RawBT Direct Text Intent (Most stable method)
+    const url = "rawbt:" + encodeURIComponent(text);
+    window.location.href = url;
+    showToast('Sent to Printer', 'success');
 };
 
 window.closeReceipt = () => {
