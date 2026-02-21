@@ -951,7 +951,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
         showToast('Success!', 'success');
         finalizeInput(customerId);
 
-        const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
+        const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20;
         const penalty = totalDue * (penaltyPerc / 100);
 
         showReceipt({
@@ -992,7 +992,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
         };
         await saveOffline(rpcPayloadFallback);
         const customerForReceipt = currentAreaCustomers.find(c => c.id === customerId) || {};
-        const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
+        const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20;
         const penalty = totalDue * (penaltyPerc / 100);
 
         showReceipt({
@@ -1197,44 +1197,37 @@ window.directPrint = () => {
     const data = window.lastReceiptData;
     if (!data) return;
 
-    // Use high-fidelity text formatting that mimics Design 2 more closely
     const penaltyAmount = data.penalty || 0;
     const amountAfterDue = data.total + penaltyAmount;
 
     const text = `
-    PULUPANDAN WATER DISTRICT
-      Digital Meter Receipt
-================================
-RECEIPT: ${data.receiptNo}
-DATE:    ${new Date().toLocaleDateString()}
---------------------------------
-${data.name.toUpperCase()}
-Brgy. ${data.barangay || 'N/A'}
---------------------------------
-METER NO:      ${data.meter}
-PREV READING:  ${data.prev}
-PRES READING:  ${data.pres}
-CONSUMPTION:   ${data.cons} m3
---------------------------------
-ARREARS:       P${(data.arrears || 0).toFixed(2)}
-CURRENT BILL:  P${(data.charges.total || 0).toFixed(2)}
---------------------------------
-AMOUNT DUE:    P${data.total.toFixed(2)}
---------------------------------
-PENALTY (${data.penaltyPerc}%): P${penaltyAmount.toFixed(2)}
-AFTER DUE:     P${amountAfterDue.toFixed(2)}
---------------------------------
+PULUPANDAN WATER DISTRICT
+Digital Meter Receipt
+---------------------------
+Receipt: ${data.receiptNo}
+Date: ${new Date().toLocaleDateString()}
+Customer: ${data.name}
+Brgy: ${data.barangay || 'N/A'}
+Meter: ${data.meter}
+---------------------------
+Prev: ${data.prev}
+Pres: ${data.pres}
+Cons: ${data.cons} m³
+---------------------------
+Arrears: P${(data.arrears || 0).toFixed(2)}
+Current: P${(data.charges.total || 0).toFixed(2)}
+TOTAL DUE: P${data.total.toFixed(2)}
+---------------------------
+Penalty (${data.penaltyPerc}%): P${penaltyAmount.toFixed(2)}
+After Due: P${amountAfterDue.toFixed(2)}
 DUE DATE: ${data.due}
-================================
-       Meter Reader:
-       ${data.readerName}
-       
-          Thank you!
+---------------------------
+Reader: ${data.readerName}
+Thank you!
 
 
 `.trim();
 
-    // RawBT Direct Text Intent (Most stable method)
     const url = "rawbt:" + encodeURIComponent(text);
     window.location.href = url;
     showToast('Sent to Printer', 'success');
@@ -1251,7 +1244,7 @@ window.showReceiptShortcut = (id) => {
 
     if (bill) {
         const charges = calculateCharges(bill.consumption, customer.has_discount);
-        const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
+        const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20;
         const penalty = bill.balance * (penaltyPerc / 100);
 
         showReceipt({
