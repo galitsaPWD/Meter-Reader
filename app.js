@@ -1193,43 +1193,148 @@ Thank you!
     }
 };
 
-window.directPrint = () => {
+window.directPrint = async () => {
     const data = window.lastReceiptData;
     if (!data) return;
 
-    // ESC/POS-like formatting for RawBT
-    const text = `
-${String.fromCharCode(27)}${String.fromCharCode(97)}${String.fromCharCode(1)}PULUPANDAN WATER DISTRICT
-Digital Meter Receipt
----------------------------
-Receipt: ${data.receiptNo}
-Date: ${new Date().toLocaleDateString()}
-Customer: ${data.name}
-Brgy: ${data.barangay || 'N/A'}
-Meter: ${data.meter}
----------------------------
-Prev: ${data.prev}
-Pres: ${data.pres}
-Cons: ${data.cons} m³
----------------------------
-Arrears: P${(data.arrears || 0).toFixed(2)}
-Current: P${(data.charges.total || 0).toFixed(2)}
-TOTAL DUE: P${data.total.toFixed(2)}
----------------------------
-Penalty: P${(data.penalty || 0).toFixed(2)}
-After Due: P${(data.total + (data.penalty || 0)).toFixed(2)}
-DUE DATE: ${data.due}
----------------------------
-Reader: ${data.readerName}
-Thank you!
+    showToast('Preparing high-quality print...', 'info');
 
+    try {
+        // Helper to get base64 logo
+        const getBase64 = async (url) => {
+            const resp = await fetch(url);
+            const blob = await resp.blob();
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+            });
+        };
 
-`.trim();
+        const logoBase64 = await getBase64('assets/logo.png');
+        const penaltyAmount = data.penalty || 0;
+        const amountAfterDue = data.total + penaltyAmount;
 
-    // RawBT Intent URL
-    const url = "rawbt:" + encodeURIComponent(text);
-    window.location.href = url;
-    showToast('Sent to RawBT', 'success');
+        const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { 
+            width: 58mm; 
+            margin: 0; 
+            padding: 0; 
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            color: #000;
+            background: #fff;
+        }
+        .receipt-container {
+            width: 54mm;
+            padding: 2mm;
+            text-align: center;
+        }
+        .logo {
+            width: 30mm;
+            height: auto;
+            margin-bottom: 5px;
+        }
+        .header h3 { margin: 5px 0; font-size: 15px; text-transform: uppercase; }
+        .header p { margin: 2px 0; font-size: 11px; }
+        .divider { border-top: 1px dashed #000; margin: 8px 0; }
+        .row { display: flex; justify-content: space-between; margin: 2px 0; }
+        .row span:first-child { text-align: left; flex: 1; }
+        .row span:last-child { text-align: right; font-weight: bold; }
+        .customer-name { 
+            font-size: 14px; 
+            font-weight: bold; 
+            margin: 10px 0 2px 0; 
+            text-align: left;
+            border-top: 1px solid #eee;
+            padding-top: 5px;
+        }
+        .brgy { text-align: left; font-size: 11px; color: #555; margin-bottom: 10px; }
+        .total-row { 
+            font-size: 14px; 
+            font-weight: bold; 
+            border-top: 1px dashed #000; 
+            border-bottom: 1px dashed #000;
+            padding: 4px 0;
+            margin: 8px 0;
+        }
+        .due-date-box {
+            background: #f0f0f0;
+            padding: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .footer { margin-top: 20px; font-size: 11px; }
+        .reader { font-weight: bold; margin-top: 5px; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div class="receipt-container">
+        <div class="header">
+            <img src="${logoBase64}" class="logo">
+            <h3>Pulupandan Water District</h3>
+            <p>Digital Meter Receipt</p>
+        </div>
+        
+        <div class="divider"></div>
+        
+        <div class="row"><span>Receipt No:</span> <span>${data.receiptNo}</span></div>
+        <div class="row"><span>Date:</span> <span>${new Date().toLocaleDateString()}</span></div>
+        
+        <div class="customer-name">${data.name}</div>
+        <div class="brgy">Brgy. ${data.barangay || 'N/A'}</div>
+        
+        <div class="row"><span>Meter No:</span> <span>${data.meter}</span></div>
+        <div class="row"><span>Prev Reading:</span> <span>${data.prev}</span></div>
+        <div class="row"><span>Pres Reading:</span> <span>${data.pres}</span></div>
+        <div class="row"><span>Consumption:</span> <span>${data.cons} m³</span></div>
+        
+        <div class="divider"></div>
+        
+        <div class="row"><span>Arrears:</span> <span>₱${(data.arrears || 0).toFixed(2)}</span></div>
+        <div class="row"><span>Current Bill:</span> <span>₱${(data.charges.total || 0).toFixed(2)}</span></div>
+        
+        <div class="total-row row">
+            <span>AMOUNT DUE:</span> 
+            <span>₱${data.total.toFixed(2)}</span>
+        </div>
+        
+        <div class="row" style="font-size: 11px;">
+            <span>Penalty (${data.penaltyPerc}%):</span> 
+            <span>₱${penaltyAmount.toFixed(2)}</span>
+        </div>
+        <div class="row" style="font-size: 13px; margin-top: 3px;">
+            <span>AFTER DUE DATE:</span> 
+            <span>₱${amountAfterDue.toFixed(2)}</span>
+        </div>
+        
+        <div class="due-date-box">
+            DUE DATE: ${data.due}
+        </div>
+        
+        <div class="footer">
+            <div>Meter Reader</div>
+            <div class="reader">${data.readerName}</div>
+            <div style="margin-top: 10px;">Thank you!</div>
+        </div>
+    </div>
+</body>
+</html>
+        `;
+
+        // Send to RawBT using HTML base64 protocol
+        const base64Html = btoa(unescape(encodeURIComponent(html)));
+        window.location.href = "rawbt:data:text/html;base64," + base64Html;
+        showToast('Sent to Printer!', 'success');
+    } catch (err) {
+        console.error('Print Error:', err);
+        showToast('Print failed (Logo error)', 'error');
+    }
 };
 
 window.closeReceipt = () => {

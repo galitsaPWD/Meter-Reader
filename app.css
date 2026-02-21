@@ -1255,6 +1255,12 @@ section {
     transform: rotate(360deg);
 }
 
+.receipt-actions-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+}
+
 /* === Printing Logic === */
 @media print {
 
