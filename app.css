@@ -856,10 +856,14 @@ section {
     background: rgba(101, 31, 255, 0.4);
     backdrop-filter: blur(8px);
     display: flex;
-    align-items: center;
+    align-items: flex-start;
+    /* Changed from center to support scrolling from top */
     justify-content: center;
     z-index: 2000;
-    padding: 20px;
+    padding: 40px 20px;
+    /* Increased padding */
+    overflow-y: auto;
+    /* Enable vertical scrolling */
 }
 
 .receipt-card {
