@@ -849,7 +849,10 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
     }
 
     const consumption = value - prevReading;
-    const readingDate = new Date().toISOString().split('T')[0];
+    // Standardize to "Month Year" format
+    const now = new Date();
+    const billingPeriod = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    const readingDate = now.toISOString().split('T')[0];
     
     // Calculate Amount
     let charges = calculateCharges(consumption, hasDiscount);
