@@ -883,7 +883,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
         if (!navigator.onLine) {
             await saveOffline(rpcPayload);
             const customerForReceipt = currentAreaCustomers.find(c => c.id === customerId) || {};
-            const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
+            const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20;
             const penalty = totalDue * (penaltyPerc / 100);
 
             showReceipt({
@@ -912,7 +912,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
             if (error.code === 'PGRST301') {
                 await saveOffline(rpcPayload);
                 const customerForReceipt = currentAreaCustomers.find(c => c.id === customerId) || {};
-                const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 10) : 10;
+                const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20;
                 const penalty = totalDue * (penaltyPerc / 100);
 
                 showReceipt({
@@ -1080,6 +1080,10 @@ function calculateCharges(consumption, hasDiscount) {
 
     let total = baseRate + consumptionCharge;
     let netTotal = total;
+
+    // Billing Logic Sync: Penalties are typically 20%
+    const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20;
+
     if (hasDiscount) {
         const discountP = parseFloat(systemSettings.discount_percentage || 20) / 100;
         netTotal -= (total * discountP);
@@ -1088,7 +1092,8 @@ function calculateCharges(consumption, hasDiscount) {
     return {
         base: baseRate,
         consumption: consumptionCharge,
-        total: netTotal
+        total: netTotal,
+        penaltyPerc: penaltyPerc // Track for receipt display
     };
 }
 
@@ -1446,3 +1451,52 @@ function showToast(message, type = 'info') {
         setTimeout(() => toast.remove(), 400);
     }, 3000);
 }
+
+// === PASSWORD VISIBILITY TOGGLE ===
+function initPasswordToggles() {
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+    passwordInputs.forEach(input => {
+        if (input.dataset.passwordToggleInit) return;
+        input.dataset.passwordToggleInit = "true";
+
+        let wrapper = input.parentElement;
+        if (!wrapper.classList.contains('password-wrapper')) {
+            wrapper = document.createElement('div');
+            wrapper.className = 'password-wrapper';
+            input.parentNode.insertBefore(wrapper, input);
+            wrapper.appendChild(input);
+        }
+
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'toggle-password';
+        toggle.setAttribute('aria-label', 'Toggle password visibility');
+        toggle.innerHTML = '<i class="fas fa-eye"></i>';
+        wrapper.appendChild(toggle);
+
+        toggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            const isPassword = input.type === 'password';
+
+            input.type = isPassword ? 'text' : 'password';
+
+            input.focus();
+            if (start !== null && end !== null) {
+                input.setSelectionRange(start, end);
+            }
+
+            const icon = toggle.querySelector('i');
+            if (icon) {
+                icon.className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
+            }
+        });
+    });
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', initPasswordToggles);
+window.initPasswordToggles = initPasswordToggles;

@@ -1363,3 +1363,41 @@ section {
         color: #000 !important;
     }
 }
+
+/* --- Password Visibility Toggle --- */
+.password-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.password-wrapper input {
+    padding-right: 45px !important;
+    width: 100%;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    color: #94A3B8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+.toggle-password:hover {
+    background: rgba(2, 136, 209, 0.1);
+    color: #0288D1;
+}
+
+.toggle-password i {
+    font-size: 1.1rem;
+}
