@@ -13,6 +13,7 @@
     <meta name="theme-color" content="#7C4DFF">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" type="image/png" href="assets/logo.png">
 </head>
 
 <body>
@@ -21,25 +22,50 @@
         <section id="auth-section" class="active">
             <div class="login-container">
                 <div class="brand">
-                    <img src="assets/logo.png" alt="PWD Logo" class="logo">
-                    <h1>Meter Reader</h1>
+                    <div class="wave-container">
+                        <svg class="waves" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+                        viewBox="0 24 150 28" preserveAspectRatio="none" shape-rendering="auto">
+                        <defs>
+                        <path id="gentle-wave" d="M-160 44c30 0 58-18 88-18s 58 18 88 18 58-18 88-18 58 18 88 18 v44h-352z" />
+                        </defs>
+                        <g class="parallax">
+                        <use xlink:href="#gentle-wave" x="48" y="0" fill="rgba(255,255,255,0.7" />
+                        <use xlink:href="#gentle-wave" x="48" y="3" fill="rgba(255,255,255,0.5)" />
+                        <use xlink:href="#gentle-wave" x="48" y="5" fill="rgba(255,255,255,0.3)" />
+                        <use xlink:href="#gentle-wave" x="48" y="7" fill="#fff" />
+                        </g>
+                        </svg>
+                    </div>
+                    <div class="logo-wrapper">
+                        <img src="assets/logo.png" alt="PWD Logo" class="logo">
+                    </div>
+                    <h1>PWD Reader</h1>
                     <p>Field Operation Portal</p>
                 </div>
 
                 <form id="loginForm" class="auth-form">
-                    <div style="margin-bottom: 20px;">
-                        <input type="email" id="email" class="input-field" required placeholder="Email Address">
+                    <div class="input-group">
+                        <div class="input-wrapper">
+                            <i class="fas fa-envelope icon"></i>
+                            <input type="email" id="email" class="input-field" required placeholder="Email Address">
+                        </div>
                     </div>
-                    <div style="margin-bottom: 30px;">
-                        <input type="password" id="password" class="input-field" required placeholder="Password">
+                    <div class="input-group">
+                        <div class="input-wrapper">
+                            <i class="fas fa-lock icon"></i>
+                            <input type="password" id="password" class="input-field" required placeholder="Enter Password">
+                        </div>
                     </div>
                     <button type="submit" id="loginBtn" class="btn-primary">
                         <span>Sign In</span>
+                        <i class="fas fa-arrow-right"></i>
                     </button>
-                    <p id="auth-error" class="error-msg hidden"
-                        style="color: var(--error); text-align: center; margin-top: 15px; font-size: 14px; font-weight: 600;">
-                    </p>
+                    <p id="auth-error" class="error-msg hidden"></p>
                 </form>
+
+                <div class="login-footer">
+                    <p>&copy; 2026 Pulupandan Water District</p>
+                </div>
             </div>
         </section>
 
