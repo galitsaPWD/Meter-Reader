@@ -1252,6 +1252,11 @@ window.shareReceipt = async () => {
     if (!data) return;
 
     const penaltyAmount = data.penalty || 0;
+    
+    // Safely format the previous date, avoiding "Invalid Date"
+    const prevDateParsed = data.prevDate ? new Date(data.prevDate) : null;
+    const prevDateStr = (prevDateParsed && !isNaN(prevDateParsed)) ? prevDateParsed.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : 'N/A';
+    const presDateStr = new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 
     const text = `
 --------------------------------
@@ -1259,25 +1264,25 @@ PULUPANDAN WATER DISTRICT
 Official Water Bill
 --------------------------------
 Date: ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
-Receipt #: ${data.receiptNo}
+Reference: ${data.receiptNo}
 --------------------------------
 CUSTOMER DETAILS
 --------------------------------
 Name: ${data.name}
 Account No: ${data.meter}
-Period: ${new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+Period: ${presDateStr}
 --------------------------------
 CONSUMPTION (cu.m.)
 --------------------------------
-Prev: ${data.prev} (${new Date(data.prevDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })})
-Pres: ${data.pres} (${new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })})
-Total:${data.cons}
+Prev: ${data.prev} (${prevDateStr})
+Pres: ${data.pres} (${presDateStr})
+Consumed (cons): ${data.cons} cu.m.
 --------------------------------
 CHARGES BREAKDOWN
 --------------------------------
-Current Charges: P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-${data.charges.discount > 0 ? `Discount:       -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}Late Penalty:    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 Arrears:         P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Current Charges: P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+${data.charges.discount > 0 ? `Discount:       -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}Late Penalty (20%): P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 --------------------------------
 TOTAL AMOUNT DUE:P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 --------------------------------
@@ -1311,6 +1316,11 @@ window.directPrint = () => {
     if (!data) return;
 
     const penaltyAmount = data.penalty || 0;
+    
+    // Safely format the previous date, avoiding "Invalid Date"
+    const prevDateParsed = data.prevDate ? new Date(data.prevDate) : null;
+    const prevDateStr = (prevDateParsed && !isNaN(prevDateParsed)) ? prevDateParsed.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : 'N/A';
+    const presDateStr = new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 
     const text = `
 --------------------------------
@@ -1318,25 +1328,25 @@ PULUPANDAN WATER DISTRICT
 Official Water Bill
 --------------------------------
 Date: ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
-Receipt #: ${data.receiptNo}
+Reference: ${data.receiptNo}
 --------------------------------
 CUSTOMER DETAILS
 --------------------------------
 Name: ${data.name}
 Account No: ${data.meter}
-Period: ${new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+Period: ${presDateStr}
 --------------------------------
 CONSUMPTION (cu.m.)
 --------------------------------
-Prev: ${data.prev} (${new Date(data.prevDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })})
-Pres: ${data.pres} (${new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })})
-Total:${data.cons}
+Prev: ${data.prev} (${prevDateStr})
+Pres: ${data.pres} (${presDateStr})
+Consumed (cons): ${data.cons} cu.m.
 --------------------------------
 CHARGES BREAKDOWN
 --------------------------------
-Current Charges: P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-${data.charges.discount > 0 ? `Discount:       -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}Late Penalty:    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 Arrears:         P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Current Charges: P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+${data.charges.discount > 0 ? `Discount:       -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}Late Penalty (20%): P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 --------------------------------
 TOTAL AMOUNT DUE:P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 --------------------------------
