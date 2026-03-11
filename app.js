@@ -1254,52 +1254,45 @@ window.shareReceipt = async () => {
     const penaltyAmount = data.penalty || 0;
 
     const text = `
+--------------------------------
 PULUPANDAN WATER DISTRICT
-Pulupandan, Negros Occidental
-NON-VAT REG. TIN 006-849-454-000
+Official Water Bill
 --------------------------------
-SERVICE INVOICE
 Date: ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+Receipt #: ${data.receiptNo}
 --------------------------------
-RECEIVED from
-${data.name}
-Address: ${data.barangay || 'N/A'}
+CUSTOMER DETAILS
+--------------------------------
+Name: ${data.name}
 Account No: ${data.meter}
-
-the sum of: P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Period: ${new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
 --------------------------------
-in payment for:
-Current:  P${(data.charges.total - (data.charges.discount || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Arrears:  ${(data.arrears || 0) > 0 ? 'P' + (data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}
-Penalty:  ${penaltyAmount > 0 ? 'P' + penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}
+CONSUMPTION (cu.m.)
 --------------------------------
-Meter Details:
 Prev: ${data.prev} (${new Date(data.prevDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })})
 Pres: ${data.pres} (${new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })})
-Cons: ${data.cons} cu.m.
+Total:${data.cons}
 --------------------------------
-TOTAL DUE: P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-DUE DATE : ${new Date(data.due).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+CHARGES BREAKDOWN
 --------------------------------
-PAYMENT IN FORM OF: [ ] CASH
+Current Charges: P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+${data.charges.discount > 0 ? `Discount:       -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}Late Penalty:    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Arrears:         P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
 --------------------------------
+TOTAL AMOUNT DUE:P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+--------------------------------
+Due Date: ${new Date(data.due).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+--------------------------------
+Reader: ${data.readerName || 'Reader'}
 
-______________________________
-Cashier / Collector
-
-No. ${data.receiptNo}
---------------------------------
-"THIS DOCUMENT IS NOT VALID 
- FOR CLAIM OF INPUT TAX"
-THIS SERVICE INVOICE SHALL BE 
-VALID FOR FIVE (5) YEARS 
-FROM THE DATE OF ATP
+Thank you for being a 
+valued customer!
     `.trim();
 
     if (navigator.share) {
         try {
             await navigator.share({
-                title: 'Service Invoice',
+                title: 'Official Water Bill',
                 text: text
             });
             showToast('Shared to printer app', 'success');
@@ -1320,46 +1313,39 @@ window.directPrint = () => {
     const penaltyAmount = data.penalty || 0;
 
     const text = `
+--------------------------------
 PULUPANDAN WATER DISTRICT
-Pulupandan, Negros Occidental
-NON-VAT REG. TIN 006-849-454-000
+Official Water Bill
 --------------------------------
-SERVICE INVOICE
 Date: ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+Receipt #: ${data.receiptNo}
 --------------------------------
-RECEIVED from
-${data.name}
-Address: ${data.barangay || 'N/A'}
+CUSTOMER DETAILS
+--------------------------------
+Name: ${data.name}
 Account No: ${data.meter}
-
-the sum of: P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Period: ${new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
 --------------------------------
-in payment for:
-Current:  P${(data.charges.total - (data.charges.discount || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Arrears:  ${(data.arrears || 0) > 0 ? 'P' + (data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}
-Penalty:  ${penaltyAmount > 0 ? 'P' + penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}
+CONSUMPTION (cu.m.)
 --------------------------------
-Meter Details:
 Prev: ${data.prev} (${new Date(data.prevDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })})
 Pres: ${data.pres} (${new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })})
-Cons: ${data.cons} cu.m.
+Total:${data.cons}
 --------------------------------
-TOTAL DUE: P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-DUE DATE : ${new Date(data.due).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+CHARGES BREAKDOWN
 --------------------------------
-PAYMENT IN FORM OF: [ ] CASH
+Current Charges: P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+${data.charges.discount > 0 ? `Discount:       -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}Late Penalty:    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Arrears:         P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
 --------------------------------
+TOTAL AMOUNT DUE:P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+--------------------------------
+Due Date: ${new Date(data.due).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+--------------------------------
+Reader: ${data.readerName || 'Reader'}
 
-______________________________
-Cashier / Collector
-
-No. ${data.receiptNo}
---------------------------------
-"THIS DOCUMENT IS NOT VALID 
- FOR CLAIM OF INPUT TAX"
-THIS SERVICE INVOICE SHALL BE 
-VALID FOR FIVE (5) YEARS 
-FROM THE DATE OF ATP
+Thank you for being a 
+valued customer!
 
 
 
