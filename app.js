@@ -220,8 +220,14 @@ async function checkSession() {
 
 async function handleLogin(e) {
     e.preventDefault();
-    const email = document.getElementById('email').value.trim();
+    let email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
+
+    // Automatically append @gmail.com if input is missing @
+    if (email && !email.includes('@')) {
+        email += '@gmail.com';
+    }
+
     const errorEl = document.getElementById('auth-error');
 
     showLoading(true);
@@ -914,9 +920,8 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
         return;
     }
 
-    const overdueDays = systemSettings ? (parseInt(systemSettings.cutoff_days || 14)) : 14;
-    const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + overdueDays);
+    const dueDate = new Date(readingDate);
+    dueDate.setDate(dueDate.getDate() + 14);
     const dueDateStr = dueDate.toISOString().split('T')[0];
 
     try {
@@ -1030,7 +1035,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
             cons: consumption,
             charges: charges,
             arrears: arrears,
-            total: totalDue,
+            total: totalDue + penalty,
             penalty: penalty,
             penaltyPerc: penaltyPerc,
             due: dueDateStr,
@@ -1074,7 +1079,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
             cons: consumption,
             charges: charges,
             arrears: arrears,
-            total: totalDue,
+            total: totalDue + penalty,
             penalty: penalty,
             penaltyPerc: penaltyPerc,
             due: dueDateStr,
@@ -1391,7 +1396,7 @@ window.showReceiptShortcut = (id) => {
             cons: bill.consumption,
             charges: charges,
             arrears: (customer.arrears || 0) - (bill.balance || 0),
-            total: bill.balance,
+            total: bill.balance + penalty, // Fix: Add penalty to the total balance
             penalty: penalty,
             penaltyPerc: penaltyPerc,
             due: bill.due_date || 'N/A',
