@@ -1361,30 +1361,30 @@ window.shareReceipt = async () => {
 PULUPANDAN WATER DISTRICT
 OFFICIAL WATER BILL
 --------------------------
-reference         ${data.receiptNo}
-date              ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+Reference No:     ${data.receiptNo}
+Date:             ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
 
- ${data.name}${data.isSenior ? ' (SENIOR)' : ''}
- ${data.barangay || ''}
- meter number     ${data.meter}
+ Consumer: ${data.name}${data.isSenior ? ' (SENIOR)' : ''}
+ Barangay: ${data.barangay || ''}
+ Meter No: ${data.meter}
 --------------------------
-prev              ${data.prev}
+Prev. Reading:    ${data.prev}
 (${prevDateStr})
-pres              ${data.pres}
+Pres. Reading:    ${data.pres}
 (${presDateStr})
-cons              ${data.cons} cu.m.
+Consumption:      ${data.cons} cu.m.
 --------------------------
-arrears           P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-current bill      P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-senior dc (${data.isSenior ? '5' : '0'}%)    ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
+Arrears:          P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Current Bill:     P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Senior Discount:  ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
 --------------------------
-amount due        P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-penalty (${data.penaltyPerc}%)      P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Amount Due:       P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Penalty (${data.penaltyPerc}%):    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 
-after due date    P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-(${dueStr})
+Amount After Due: P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+(Due Date: ${dueStr})
 --------------------------
-${data.readerName}
+Reader: ${data.readerName}
 Thank you!
 --------------------------
     `.trim();
@@ -1422,30 +1422,30 @@ window.directPrint = () => {
 PULUPANDAN WATER DISTRICT
 OFFICIAL WATER BILL
 --------------------------
-reference         ${data.receiptNo}
-date              ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+Reference No:     ${data.receiptNo}
+Date:             ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
 
- ${data.name}${data.isSenior ? ' (SENIOR)' : ''}
- ${data.barangay || ''}
- meter number     ${data.meter}
+ Consumer: ${data.name}${data.isSenior ? ' (SENIOR)' : ''}
+ Barangay: ${data.barangay || ''}
+ Meter No: ${data.meter}
 --------------------------
-prev              ${data.prev}
+Prev. Reading:    ${data.prev}
 (${prevDateStr})
-pres              ${data.pres}
+Pres. Reading:    ${data.pres}
 (${presDateStr})
-cons              ${data.cons} cu.m.
+Consumption:      ${data.cons} cu.m.
 --------------------------
-arrears           P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-current bill      P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-senior dc (${data.isSenior ? '5' : '0'}%)    ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
+Arrears:          P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Current Bill:     P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Senior Discount:  ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
 --------------------------
-amount due        P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-penalty (${data.penaltyPerc}%)      P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Amount Due:       P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Penalty (${data.penaltyPerc}%):    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 
-after due date    P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-(${dueStr})
+Amount After Due: P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+(Due Date: ${dueStr})
 --------------------------
-${data.readerName}
+Reader: ${data.readerName}
 Thank you!
 --------------------------
     `.trim();
