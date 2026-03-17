@@ -1357,36 +1357,37 @@ window.shareReceipt = async () => {
     const dueStr = new Date(data.due).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 
     const text = `
---------------------------
+--------------------------------
 PULUPANDAN WATER DISTRICT
 OFFICIAL WATER BILL
---------------------------
+--------------------------------
 Reference No:     ${data.receiptNo}
 Date:             ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
 
- Consumer: ${data.name}${data.isSenior ? ' (SENIOR)' : ''}
+ Consumer: ${data.name}
+ ${data.isSenior ? '(SENIOR)' : ''}
  Barangay: ${data.barangay || ''}
  Meter No: ${data.meter}
---------------------------
+--------------------------------
 Prev. Reading:    ${data.prev}
 (${prevDateStr})
 Pres. Reading:    ${data.pres}
 (${presDateStr})
 Consumption:      ${data.cons} cu.m.
---------------------------
+--------------------------------
 Arrears:          P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
 Current Bill:     P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Senior Discount:  ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
---------------------------
+Senior DC:        ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
+--------------------------------
 Amount Due:       P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 Penalty (${data.penaltyPerc}%):    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 
 Amount After Due: P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 (Due Date: ${dueStr})
---------------------------
+--------------------------------
 Reader: ${data.readerName}
 Thank you!
---------------------------
+--------------------------------
     `.trim();
 
     if (navigator.share) {
@@ -1418,36 +1419,37 @@ window.directPrint = () => {
     const dueStr = new Date(data.due).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 
     const text = `
---------------------------
+--------------------------------
 PULUPANDAN WATER DISTRICT
 OFFICIAL WATER BILL
---------------------------
+--------------------------------
 Reference No:     ${data.receiptNo}
 Date:             ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
 
- Consumer: ${data.name}${data.isSenior ? ' (SENIOR)' : ''}
+ Consumer: ${data.name}
+ ${data.isSenior ? '(SENIOR)' : ''}
  Barangay: ${data.barangay || ''}
  Meter No: ${data.meter}
---------------------------
+--------------------------------
 Prev. Reading:    ${data.prev}
 (${prevDateStr})
 Pres. Reading:    ${data.pres}
 (${presDateStr})
 Consumption:      ${data.cons} cu.m.
---------------------------
+--------------------------------
 Arrears:          P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
 Current Bill:     P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Senior Discount:  ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
---------------------------
+Senior DC:        ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
+--------------------------------
 Amount Due:       P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 Penalty (${data.penaltyPerc}%):    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 
 Amount After Due: P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 (Due Date: ${dueStr})
---------------------------
+--------------------------------
 Reader: ${data.readerName}
 Thank you!
---------------------------
+--------------------------------
     `.trim();
 
     const url = "rawbt:" + encodeURIComponent(text);
