@@ -1357,36 +1357,36 @@ window.shareReceipt = async () => {
     const dueStr = new Date(data.due).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 
     const text = `
---------------------------------
+--------------------------
 PULUPANDAN WATER DISTRICT
-Official Water Bill
---------------------------------
-REFERENCE CODE
-${data.receiptNo}
-Date: ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+OFFICIAL WATER BILL
+--------------------------
+reference         ${data.receiptNo}
+date              ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
 
-${data.name}${data.isSenior ? ' (SENIOR)' : ''}
-Brgy. ${data.barangay || ''}
+ ${data.name}${data.isSenior ? ' (SENIOR)' : ''}
+ ${data.barangay || ''}
+ meter number     ${data.meter}
+--------------------------
+prev              ${data.prev}
+(${prevDateStr})
+pres              ${data.pres}
+(${presDateStr})
+cons              ${data.cons} cu.m.
+--------------------------
+arrears           P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+current bill      P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+senior dc (${data.isSenior ? '5' : '0'}%)    ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
+--------------------------
+amount due        P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+penalty (${data.penaltyPerc}%)      P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 
-Meter Number:     ${data.meter}
-Prev Reading:     ${data.prev} (${prevDateStr})
-Pres Reading:     ${data.pres} (${presDateStr})
-Consumption:      ${data.cons} cu.m.
---------------------------------
-Arrears:          P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Current Bill:     P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-${data.charges.discount > 0 ? `Senior Discount (5%): -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}
-AMOUNT DUE:       P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Penalty (${data.penaltyPerc}%):    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-
-AFTER DUE DATE:   P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
---------------------------------
-DUE DATE
-${dueStr}
-
-Meter Reader
+after due date    P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+(${dueStr})
+--------------------------
 ${data.readerName}
---------------------------------
+Thank you!
+--------------------------
     `.trim();
 
     if (navigator.share) {
@@ -1418,36 +1418,36 @@ window.directPrint = () => {
     const dueStr = new Date(data.due).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 
     const text = `
---------------------------------
+--------------------------
 PULUPANDAN WATER DISTRICT
-Official Water Bill
---------------------------------
-REFERENCE CODE
-${data.receiptNo}
-Date: ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+OFFICIAL WATER BILL
+--------------------------
+reference         ${data.receiptNo}
+date              ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
 
-${data.name}${data.isSenior ? ' (SENIOR)' : ''}
-Brgy. ${data.barangay || ''}
+ ${data.name}${data.isSenior ? ' (SENIOR)' : ''}
+ ${data.barangay || ''}
+ meter number     ${data.meter}
+--------------------------
+prev              ${data.prev}
+(${prevDateStr})
+pres              ${data.pres}
+(${presDateStr})
+cons              ${data.cons} cu.m.
+--------------------------
+arrears           P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+current bill      P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+senior dc (${data.isSenior ? '5' : '0'}%)    ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
+--------------------------
+amount due        P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+penalty (${data.penaltyPerc}%)      P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 
-Meter Number:     ${data.meter}
-Prev Reading:     ${data.prev} (${prevDateStr})
-Pres Reading:     ${data.pres} (${presDateStr})
-Consumption:      ${data.cons} cu.m.
---------------------------------
-Arrears:          P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Current Bill:     P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-${data.charges.discount > 0 ? `Senior Discount (5%): -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}
-AMOUNT DUE:       P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Penalty (${data.penaltyPerc}%):    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-
-AFTER DUE DATE:   P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
---------------------------------
-DUE DATE
-${dueStr}
-
-Meter Reader
+after due date    P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+(${dueStr})
+--------------------------
 ${data.readerName}
---------------------------------
+Thank you!
+--------------------------
     `.trim();
 
     const url = "rawbt:" + encodeURIComponent(text);
