@@ -1364,7 +1364,6 @@ window.shareReceipt = async () => {
     };
 
     const text = `
---------------------------------
 PULUPANDAN WATER DISTRICT
 OFFICIAL WATER BILL
 --------------------------------
@@ -1382,8 +1381,7 @@ ${align("Pres. Reading:", data.pres)}
 ${align("Consumption:", data.cons + " cu.m.")}
 --------------------------------
 ${align("Arrears:", "P" + (data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
-${align("Current Bill:", "P" + (data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
-${align("Senior DC (5%):", data.charges.discount > 0 ? "-P" + data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : "P0.00")}
+${align("Current Bill:", "P" + (data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}${data.isSenior ? `\n${align("Senior DC (5%):", "-P" + data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 }))}` : ''}
 --------------------------------
 ${align("Amount Due:", "P" + data.total.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 ${align("Penalty (" + data.penaltyPerc + "%):", "P" + penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
@@ -1392,8 +1390,7 @@ ${align("Amount After Due:", "P" + amountAfterDue.toLocaleString(undefined, { mi
 (Due Date: ${dueStr})
 --------------------------------
 Reader: ${data.readerName}
-Thank you!
---------------------------------
+Thank you for being a valued customer!
     `.trim();
 
     if (navigator.share) {
@@ -1432,7 +1429,6 @@ window.directPrint = () => {
     };
 
     const text = `
---------------------------------
 PULUPANDAN WATER DISTRICT
 OFFICIAL WATER BILL
 --------------------------------
@@ -1450,8 +1446,7 @@ ${align("Pres. Reading:", data.pres)}
 ${align("Consumption:", data.cons + " cu.m.")}
 --------------------------------
 ${align("Arrears:", "P" + (data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
-${align("Current Bill:", "P" + (data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
-${align("Senior DC (5%):", data.charges.discount > 0 ? "-P" + data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : "P0.00")}
+${align("Current Bill:", "P" + (data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}${data.isSenior ? `\n${align("Senior DC (5%):", "-P" + data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 }))}` : ''}
 --------------------------------
 ${align("Amount Due:", "P" + data.total.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 ${align("Penalty (" + data.penaltyPerc + "%):", "P" + penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
@@ -1460,8 +1455,7 @@ ${align("Amount After Due:", "P" + amountAfterDue.toLocaleString(undefined, { mi
 (Due Date: ${dueStr})
 --------------------------------
 Reader: ${data.readerName}
-Thank you!
---------------------------------
+Thank you for being a valued customer!
     `.trim();
 
     const url = "rawbt:" + encodeURIComponent(text);
