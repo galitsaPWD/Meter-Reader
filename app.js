@@ -2,6 +2,7 @@ let currentUser = null;
 let profile = null;
 let assignedAreas = [];
 let systemSettings = null;
+let rateSchedules = null;
 let isOnline = navigator.onLine;
 let isSyncInProgress = false;
 
@@ -149,7 +150,7 @@ function updateConnectionStatus() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🚀 WB Reader Premium Initializing...');
+    console.log('WB Reader Premium Initializing...');
 
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./sw.js').then(reg => {
@@ -308,7 +309,7 @@ async function fetchProfileAndLoadData() {
 
         } else {
             // === OFFLINE: Load from Cache ===
-            console.log('⚠️ Offline: Loading profile from cache...');
+            console.log('Offline: Loading profile from cache...');
             const cached = localStorage.getItem('cached_profile');
             if (cached) {
                 profile = JSON.parse(cached);
@@ -356,8 +357,17 @@ async function loadDashboard() {
             // 1. System Settings
             const { data: s } = await supabase.from('system_settings').select('*').single();
             settings = s;
-            // Cache settings (reuse 'areas' store for now or add new? ID 'settings')
-            if (settings) saveCache(STORE_AREAS, [{ id: 'settings', ...settings }]); // Hacky but works for singular config
+            
+            // 1.5 Rate Schedules
+            const { data: rs } = await supabase.from('rate_schedules').select('*');
+            rateSchedules = rs || [];
+
+            // Cache settings & rates (reuse STORE_AREAS differentiating by 'type')
+            const cachePayload = [];
+            if (settings) cachePayload.push({ id: 'settings', ...settings, type: 'settings' });
+            if (rateSchedules) rateSchedules.forEach(r => cachePayload.push({ ...r, type: 'rate' }));
+            
+            if (cachePayload.length > 0) await saveCache(STORE_AREAS, cachePayload);
 
             // 2. Identify Staff ID
             let staffIntId = null;
@@ -396,7 +406,7 @@ async function loadDashboard() {
             const { data: fullCustomers } = await supabase
                 .from('customers')
                 .select('*')
-                .in('status', ['active', 'inactive']);
+                .or('status.eq.active,status.eq.inactive,status.is.null');
             
             // 6. Fetch ALL billing records for these customers (to build history/arrears)
             const { data: allBills } = await supabase
@@ -422,6 +432,8 @@ async function loadDashboard() {
                     ...c,
                     previous_reading: latestBilling ? latestBilling.current_reading : 0,
                     arrears: arrears,
+                    category: (c.customer_type || 'residential').toLowerCase(),
+                    meter_size: (c.meter_size || '1/2').replace(/"/g, ''),
                     history: sortedBills.slice(0, 12)
                 };
             });
@@ -447,7 +459,7 @@ async function loadDashboard() {
 
         } else {
             // === OFFLINE: Fetch from IndexedDB ===
-            console.log('⚠️ Offline: Loading dashboard from cache...');
+            console.log('Offline: Loading dashboard from cache...');
 
             const lastSync = localStorage.getItem('sync_areas_time');
             const startOfDay = new Date();
@@ -460,8 +472,9 @@ async function loadDashboard() {
                 showToast('Daily cache expired. Go online to refresh.', 'warning');
             } else {
                 const cachedItems = await getCache(STORE_AREAS);
-                settings = cachedItems.find(i => i.id === 'settings');
+                settings = cachedItems.find(i => i.type === 'settings' || i.id === 'settings');
                 areas = cachedItems.filter(i => i.type === 'area');
+                rateSchedules = cachedItems.filter(i => i.type === 'rate');
             }
 
 
@@ -502,15 +515,16 @@ async function loadDashboard() {
         }
 
         systemSettings = settings;
+        // rateSchedules already set above
         assignedAreas = areas || [];
 
         renderBarangayDashboard(assignedAreas, todayBills, allCustomers);
         updateSyncCount();
 
-        // Calculate Totals — only for THIS reader's assigned customers
+        // Calculate Totals - only for THIS reader's assigned customers
         const todayConsumption = todayBills.reduce((sum, b) => sum + (parseFloat(b.consumption) || 0), 0);
         const offlineItems = await getOfflineReadings();
-        // Offline items already tied to a specific customer_id — no extra filter needed
+        // Offline items already tied to a specific customer_id - no extra filter needed
         const offlineTotal = offlineItems.reduce((sum, r) => sum + (parseFloat(r.p_consumption) || 0), 0);
 
         totalReadingsDisplay.innerHTML = `${(todayConsumption + offlineTotal).toFixed(1)} <span class="unit">cu.m.</span>`;
@@ -613,7 +627,7 @@ async function openArea(areaId, areaName, jumpToBrgy = 'All') {
                         due_date
                     )
                 `)
-                .eq('status', 'active');
+                .or('status.eq.active,status.is.null');
 
             if (error) throw error;
 
@@ -627,6 +641,8 @@ async function openArea(areaId, areaName, jumpToBrgy = 'All') {
                     ...c,
                     previous_reading: latestBilling ? latestBilling.current_reading : 0,
                     arrears: arrears,
+                    category: (c.customer_type || 'residential').toLowerCase(),
+                    meter_size: (c.meter_size || '1/2').replace(/"/g, ''), // Clean 1/2" to 1/2
                     history: sortedBills.slice(0, 12) // Last 12 months
                 };
             });
@@ -638,7 +654,7 @@ async function openArea(areaId, areaName, jumpToBrgy = 'All') {
 
         } else {
             // === OFFLINE: Fetch from Cache ===
-            console.log('⚠️ Offline: Loading customers from cache...');
+            console.log('Offline: Loading customers from cache...');
 
             const lastSync = localStorage.getItem('sync_customers_time');
             const startOfDay = new Date();
@@ -791,7 +807,7 @@ function renderCustomerList(customers, offlineReadings = [], todayStr = '') {
                                 <div class="value" id="cons-${c.id}">0.0 <span class="unit">cu.m.</span></div>
                             </div>
 
-                            <button onclick="submitReading(${c.id}, ${c.previous_reading}, ${c.has_discount}, ${c.arrears})" 
+                            <button onclick="submitReading(${c.id}, ${c.previous_reading}, ${c.has_discount}, ${c.arrears}, '${c.category}', '${c.meter_size}')" 
                                     class="btn-save" ${isTodaySaved ? 'disabled' : ''}>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                                     <polyline points="20 6 9 17 4 12"></polyline>
@@ -884,7 +900,7 @@ window.updateConsumption = (id, prev) => {
     }
 };
 
-async function submitReading(customerId, prevReading, hasDiscount, arrears) {
+async function submitReading(customerId, prevReading, hasDiscount, arrears, category, meterSize) {
     const input = document.getElementById(`reading-${customerId}`);
     const value = parseFloat(input.value);
 
@@ -902,20 +918,26 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
     // Calculate Amount
     let charges;
     let totalDue;
+    const submittedCust = currentAreaCustomers.find(c => c.id === customerId);
 
     try {
-        charges = calculateCharges(consumption, hasDiscount);
+        // Use passed category/meterSize if available, fallback to object lookups
+        const categoryKey = category || submittedCust?.category || 'residential';
+        const size = meterSize || submittedCust?.meter_size || '1/2';
+        
+        charges = calculateCharges(consumption, hasDiscount, { category: categoryKey, meter_size: size });
         totalDue = charges.total + arrears;
     } catch (calcErr) {
-        showToast('Cannot submit: system rates not loaded yet. Please wait a moment and try again.', 'error');
+        console.error('Calc Error:', calcErr);
+        showToast('Calculation error: rates not loaded. Refresh and try again.', 'error');
         showLoading(false);
         return;
     }
 
     // Safety guard: a zero-amount bill will be immediately marked PAID by the
-    // payment RPC (balance <= 0 → paid). Reject the submission loudly.
+    // payment RPC (balance <= 0 -> paid). Reject the submission loudly.
     if (totalDue <= 0 && consumption > 0) {
-        showToast('Calculation error: bill amount is ₱0. Check system settings and retry.', 'error');
+        showToast('Calculation error: bill amount is P0. Check system settings and retry.', 'error');
         showLoading(false);
         return;
     }
@@ -1035,7 +1057,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
             cons: consumption,
             charges: charges,
             arrears: arrears,
-            total: totalDue + penalty,
+            total: totalDue, // Pure total without penalty added twice
             penalty: penalty,
             penaltyPerc: penaltyPerc,
             due: dueDateStr,
@@ -1079,7 +1101,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears) {
             cons: consumption,
             charges: charges,
             arrears: arrears,
-            total: totalDue + penalty,
+            total: totalDue,
             penalty: penalty,
             penaltyPerc: penaltyPerc,
             due: dueDateStr,
@@ -1131,25 +1153,56 @@ function extractBarangay(address) {
     return parts[parts.length - 1] || 'N/A';
 }
 
-function calculateCharges(consumption, hasDiscount) {
-    if (!systemSettings) throw new Error('System settings not loaded — cannot calculate charges.');
-    const t1T = systemSettings.tier1_threshold || 10;
-    const t1R = systemSettings.tier1_rate || 15;
-    const t2T = systemSettings.tier2_threshold || 20;
-    const t2R = systemSettings.tier2_rate || 20;
-    const t3R = systemSettings.tier3_rate || 25;
-    const baseRate = parseFloat(systemSettings.base_rate) || 150;
+function calculateCharges(consumption, hasDiscount, customer) {
+    if (!systemSettings || !rateSchedules || rateSchedules.length === 0) {
+        throw new Error('Rate schedules not loaded.');
+    }
+
+    // Find matching schedule
+    const catKey = (customer?.category || 'residential').toLowerCase();
+    const meterSize = (customer?.meter_size || '1/2').trim();
+    const schedule = rateSchedules.find(s => s.category_key === catKey);
+    
+    if (!schedule) throw new Error(`Rate schedule not found for ${catKey}`);
+
+    // Map meter size to column
+    let baseRateCol = 'min_charge_1_2';
+    if (meterSize === '3/4') baseRateCol = 'min_charge_3_4';
+    else if (meterSize === '1') baseRateCol = 'min_charge_1';
+    else if (meterSize === '1 1/2') baseRateCol = 'min_charge_1_1_2';
+    else if (meterSize.startsWith('2')) baseRateCol = 'min_charge_2';
+    else if (meterSize.startsWith('3')) baseRateCol = 'min_charge_3';
+    else if (meterSize.startsWith('4')) baseRateCol = 'min_charge_4';
+
+    const baseRate = parseFloat(schedule[baseRateCol]) || 260; 
+    const factor = parseFloat(schedule.factor) || 1.0;
 
     let consumptionCharge = 0;
-    if (consumption > 0) {
-        const t1Usage = Math.min(consumption, t1T);
-        consumptionCharge += t1Usage * t1R;
-        if (consumption > t1T) {
-            const t2Usage = Math.min(consumption - t1T, t2T - t1T);
-            consumptionCharge += t2Usage * t2R;
-            if (consumption > t2T) {
-                const t3Usage = consumption - t2T;
-                consumptionCharge += t3Usage * t3R;
+    // PWD Standard: First 10 cu.m. is covered by Minimum Charge (Base Rate)
+    if (consumption > 10) {
+        let excess = consumption - 10;
+        
+        // Tier 1: 11-20 (Max 10)
+        const t1Usage = Math.min(excess, 10);
+        consumptionCharge += t1Usage * (parseFloat(schedule.tier1_rate) * factor);
+        excess -= t1Usage;
+        
+        if (excess > 0) {
+            // Tier 2: 21-30 (Max 10)
+            const t2Usage = Math.min(excess, 10);
+            consumptionCharge += t2Usage * (parseFloat(schedule.tier2_rate) * factor);
+            excess -= t2Usage;
+            
+            if (excess > 0) {
+                // Tier 3: 31-40 (Max 10)
+                const t3Usage = Math.min(excess, 10);
+                consumptionCharge += t3Usage * (parseFloat(schedule.tier3_rate) * factor);
+                excess -= t3Usage;
+                
+                if (excess > 0) {
+                    // Tier 4: 41+ 
+                    consumptionCharge += excess * (parseFloat(schedule.tier4_rate) * factor);
+                }
             }
         }
     }
@@ -1157,18 +1210,18 @@ function calculateCharges(consumption, hasDiscount) {
     let total = baseRate + consumptionCharge;
     let discountAmount = 0;
     if (hasDiscount) {
-        const discountP = parseFloat(systemSettings.discount_percentage || 20) / 100;
+        const discountP = parseFloat(systemSettings.discount_percentage || 5) / 100;
         discountAmount = total * discountP;
     }
     let netTotal = total - discountAmount;
-    const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20;
+    const penaltyPerc = parseFloat(systemSettings.penalty_percentage) || 10;
 
     return {
         base: baseRate,
         consumption: consumptionCharge,
         total: netTotal,
         discount: discountAmount,
-        penaltyPerc: penaltyPerc // Track for receipt display
+        penaltyPerc: penaltyPerc
     };
 }
 
@@ -1189,61 +1242,100 @@ function showReceipt(data) {
     };
 
     body.innerHTML = `
-        <div class="receipt-row"><span>Reference Code:</span> <strong>${data.receiptNo}</strong></div>
-        <div class="receipt-row"><span>Date:</span> <span>${formatMdy(new Date())}</span></div>
-        <div style="margin: 15px 0 5px 0; font-weight: 700; border-top: 1px solid #eee; padding-top: 10px; font-size: 16px;">${data.name}</div>
-        <div style="font-size: 13px; color: #666; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">Brgy. ${barangay}</div>
-        
-        <div class="receipt-row"><span>Meter No:</span> <span>${data.meter}</span></div>
-        <div class="receipt-row">
-            <div>
-                <span style="display: block;">Prev Reading:</span>
-                <span style="font-size: 11px; color: #888;">(${formatMdy(data.prevDate)})</span>
-            </div>
-            <span>${data.prev}</span>
+        <!-- HEADER: Reference & Date -->
+        <div style="text-align: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">
+            <div style="font-size: 11px; color: #666; text-transform: uppercase; font-weight: 600; margin-bottom: 2px;">Reference Code</div>
+            <div style="font-size: 18px; font-weight: 800; color: #000;">${data.receiptNo}</div>
+            <div style="font-size: 11px; color: #888; margin-top: 2px;">Date: ${formatMdy(new Date())}</div>
         </div>
-        <div class="receipt-row">
-            <div>
-                <span style="display: block;">Pres Reading:</span>
-                <span style="font-size: 11px; color: #888;">(${formatMdy(data.currentDate)})</span>
+
+        <!-- CONSUMER SECTION -->
+        <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                <div style="font-size: 16px; font-weight: 700; color: #333; display: flex; align-items: center; gap: 8px;">
+                    ${data.name}
+                    ${data.isSenior ? '<span style="background: #ecfdf5; color: #059669; font-size: 9px; padding: 2px 6px; border-radius: 4px; border: 1px solid #10b981; font-weight: 800;">SENIOR</span>' : ''}
+                </div>
             </div>
-            <span>${data.pres}</span>
+            <div style="font-size: 13px; color: #666;">Brgy. ${barangay}</div>
         </div>
-        <div class="receipt-row"><span>Consumption:</span> <strong>${data.cons} cu.m.</strong></div>
-        
-        <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
-            <div class="receipt-row"><span>Arrears:</span> <span>₱${(data.arrears || 0).toFixed(2)}</span></div>
-            <div class="receipt-row"><span>Current Bill:</span> <span>₱${(data.charges.total || 0).toFixed(2)}</span></div>
+
+        <!-- READINGS SECTION -->
+        <div style="margin-bottom: 20px;">
+            <div class="receipt-row" style="margin-bottom: 8px;">
+                <span style="color: #666;">Meter Number:</span> 
+                <span style="font-weight: 600;">${data.meter}</span>
+            </div>
+            
+            <div class="receipt-row" style="margin-bottom: 8px;">
+                <div>
+                    <span style="display: block; color: #666;">Prev Reading:</span>
+                    <span style="font-size: 10px; color: #999;">(${formatMdy(data.prevDate)})</span>
+                </div>
+                <span style="font-size: 14px;">${data.prev}</span>
+            </div>
+            
+            <div class="receipt-row" style="margin-bottom: 8px;">
+                <div>
+                    <span style="display: block; color: #666;">Pres Reading:</span>
+                    <span style="font-size: 10px; color: #999;">(${formatMdy(data.currentDate)})</span>
+                </div>
+                <span style="font-size: 14px;">${data.pres}</span>
+            </div>
+
+            <div class="receipt-row" style="margin-top: 10px; padding: 10px 0; border-top: 1px dashed #eee; border-bottom: 1px dashed #eee;">
+                <span style="font-weight: 600; color: #333;">Consumption:</span>
+                <strong style="font-size: 16px;">${data.cons} cu.m.</strong>
+            </div>
+        </div>
+
+        <!-- BILLING DETAILS SECTION -->
+        <div style="margin-bottom: 20px;">
+            <div class="receipt-row" style="margin-bottom: 6px;">
+                <span style="color: #666;">Arrears:</span> 
+                <span>P${(data.arrears || 0).toFixed(2)}</span>
+            </div>
+            
+            <div class="receipt-row" style="margin-bottom: 6px;">
+                <span style="color: #666;">Current Bill:</span> 
+                <span>P${(data.charges.total || 0).toFixed(2)}</span>
+            </div>
             
             ${data.charges.discount > 0 ? `
-            <div class="receipt-row" style="color: #059669; font-size: 13px;">
+            <div class="receipt-row" style="color: #059669; font-size: 13px; margin-top: 4px;">
                 <span>Senior Discount:</span> 
-                <span>-₱${data.charges.discount.toFixed(2)}</span>
+                <span>-P${data.charges.discount.toFixed(2)}</span>
             </div>
             ` : ''}
+        </div>
 
-            <div class="receipt-row total" style="border-bottom: 1px dashed #ddd; padding-bottom: 10px; margin-bottom: 10px;">
-                <span>AMOUNT DUE:</span> 
-                <span>₱${data.total.toFixed(2)}</span>
+        <!-- TOTALS SECTION -->
+        <div style="border-top: 2px solid #333; padding-top: 15px;">
+            <div class="receipt-row" style="margin-bottom: 10px;">
+                <span style="font-size: 16px; font-weight: 700; color: var(--primary);">AMOUNT DUE:</span> 
+                <span style="font-size: 20px; font-weight: 800; color: var(--primary);">P${data.total.toFixed(2)}</span>
             </div>
             
-            <div class="receipt-row" style="color: #666; font-size: 13px;">
+            <div class="receipt-row" style="margin-bottom: 8px; color: #666; font-size: 13px;">
                 <span>Penalty (${data.penaltyPerc}%):</span> 
-                <span>₱${penaltyAmount.toFixed(2)}</span>
+                <span>P${penaltyAmount.toFixed(2)}</span>
             </div>
-            <div class="receipt-row total" style="color: var(--primary); margin-top: 5px;">
-                <span>AFTER DUE DATE:</span> 
-                <span>₱${amountAfterDue.toFixed(2)}</span>
+            
+            <div class="receipt-row" style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #ccc;">
+                <span style="font-size: 16px; font-weight: 700; color: #000;">AFTER DUE DATE:</span> 
+                <span style="font-size: 20px; font-weight: 800; color: #000;">P${amountAfterDue.toFixed(2)}</span>
             </div>
-        </div>
-        
-        <div style="margin-top: 15px; background: #F5F5F5; padding: 10px; border-radius: 8px; text-align: center; font-size: 12px;">
-            DUE DATE: <strong>${formatMdy(data.due)}</strong>
+            
+            <div style="margin-top: 15px; background: #f5f5f5; padding: 12px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 11px; color: #666; text-transform: uppercase; font-weight: 700;">DUE DATE</div>
+                <div style="font-size: 16px; font-weight: 800; color: #333; margin-top: 2px;">${formatMdy(data.due)}</div>
+            </div>
         </div>
 
-        <div style="margin-top: 25px; text-align: center; border-top: 1px solid #eee; padding-top: 15px;">
-            <div style="font-size: 12px; color: #888;">Meter Reader</div>
-            <div style="font-weight: 700; margin-top: 5px;">${data.readerName}</div>
+        <!-- FOOTER -->
+        <div style="margin-top: 30px; text-align: center; border-top: 1px solid #eee; padding-top: 15px;">
+            <div style="font-size: 11px; color: #888;">Meter Reader</div>
+            <div style="font-weight: 700; color: #333; margin-top: 4px;">${data.readerName}</div>
         </div>
     `;
     document.getElementById('receipt-modal').classList.remove('hidden');
@@ -1351,7 +1443,7 @@ CHARGES BREAKDOWN
 --------------------------------
 Arrears:         P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
 Current Charges: P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-${data.charges.discount > 0 ? `Discount:       -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}Late Penalty (20%): P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+${data.charges.discount > 0 ? `Discount:       -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}Late Penalty (${data.penaltyPerc}%): P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 --------------------------------
 TOTAL AMOUNT DUE:P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 --------------------------------
@@ -1386,9 +1478,15 @@ window.showReceiptShortcut = (id) => {
         // NEW PLAN: Penalty only on CURRENT bill amount (Base + Consumption), ignoring Arrears/Discount
         const penalty = (charges.base + charges.consumption) * (penaltyPerc / 100);
 
+        // NEW CONSISTENCY LOGIC
+        const sortedHistory = [...(customer.history || [])].sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date));
+        const currentIdx = sortedHistory.findIndex(h => h.reading_date === bill.reading_date);
+        const prevBill = currentIdx !== -1 ? sortedHistory[currentIdx + 1] : null;
+
         showReceipt({
-            receiptNo: `RCP-${new Date().getFullYear()}-${bill.id || 'N/A'}`,
+            receiptNo: `RCP-${new Date(bill.reading_date || new Date()).getFullYear()}-${String(bill.receipt_no || bill.bill_no || bill.id).padStart(4, '0')}`,
             name: `${customer.first_name} ${customer.last_name}`,
+            isSenior: customer.has_discount, // ADDED SENIOR FLAG
             barangay: extractBarangay(customer.address),
             meter: customer.meter_number,
             prev: bill.current_reading - bill.consumption,
@@ -1396,11 +1494,11 @@ window.showReceiptShortcut = (id) => {
             cons: bill.consumption,
             charges: charges,
             arrears: (customer.arrears || 0) - (bill.balance || 0),
-            total: bill.balance + penalty, // Fix: Add penalty to the total balance
+            total: bill.balance, 
             penalty: penalty,
             penaltyPerc: penaltyPerc,
             due: bill.due_date || 'N/A',
-            prevDate: (customer.history && customer.history[1]) ? customer.history[1].reading_date : (customer.history && customer.history[0] ? customer.history[0].reading_date : 'N/A'),
+            prevDate: prevBill ? prevBill.reading_date : 'N/A',
             currentDate: bill.reading_date,
             readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader'
         });
@@ -1676,11 +1774,11 @@ async function loadCutoffs() {
                     <p>${c.address || 'No address provided'}</p>
                     <div class="card-meta">
                         <span class="badge badge-error">CUTOFF</span>
-                        ${c.arrears ? `<span class="price-pill">ARREARS: ₱${parseFloat(c.arrears || 0).toLocaleString()}</span>` : ''}
+                        ${c.arrears ? `<span class="price-pill">ARREARS: P${parseFloat(c.arrears || 0).toLocaleString()}</span>` : ''}
                     </div>
                 </div>
                 ${isDone
-                    ? `<span class="cutoff-done-badge">✓ Done</span>`
+                    ? `<span class="cutoff-done-badge">Done</span>`
                     : `<button class="btn-cutoff-done" onclick="handleCutoffDone('${c.id}', '${c.first_name} ${c.last_name}', '${c.updated_at}')">Mark Done</button>`
                 }
             </div>
@@ -1921,7 +2019,7 @@ async function loadHistory() {
                                 <h4>${log.display_name}</h4>
                                 <span class="history-status-tag">${log.status.toUpperCase()}</span>
                             </div>
-                            <p>${log.consumption || log.p_consumption || 0} cu.m. consumed • ₱${(log.amount || log.p_amount || 0).toFixed(2)}</p>
+                            <p>${log.consumption || log.p_consumption || 0} cu.m. consumed   P${(log.amount || log.p_amount || 0).toFixed(2)}</p>
                         </div>
                         <div class="btn-view-log">View</div>
                     </div>
@@ -1948,13 +2046,21 @@ async function viewHistoricalReceipt(billId) {
                 .single();
             
             if (!billError && bill) {
-                const { data: customer } = await supabase
-                    .from('customers')
-                    .select('*')
-                    .eq('id', bill.customer_id)
-                    .single();
+                // Fetch customer AND their recent bills for history comparison
+                const [custRes, histRes] = await Promise.all([
+                    supabase.from('customers').select('*').eq('id', bill.customer_id).single(),
+                    supabase.from('billing').select('*').eq('customer_id', bill.customer_id).order('reading_date', { ascending: false }).limit(12)
+                ]);
                 
-                billData = { ...bill, customer };
+                if (custRes.data) {
+                    billData = { 
+                        ...bill, 
+                        customer: { 
+                            ...custRes.data, 
+                            history: histRes.data || [] 
+                        } 
+                    };
+                }
             }
         } else {
             const cachedCustomers = await getCache(STORE_CUSTOMERS);
@@ -1968,14 +2074,20 @@ async function viewHistoricalReceipt(billId) {
         }
 
         if (billData) {
-            // Find prev date from customer history
-            const history = (billData.customer.history || []);
+            // Find prev date from customer history (SORTED)
+            const history = [...(billData.customer.history || [])].sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date));
             const currentIdx = history.findIndex(h => h.id == billData.id || h.reading_date === billData.reading_date);
             const prevBill = currentIdx !== -1 ? history[currentIdx + 1] : null;
 
+            // Live Penalty Calculation
+            const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20;
+            const currentCharges = (billData.base_charge || 0) + (billData.consumption_charge || 0);
+            const calculatedPenalty = currentCharges * (penaltyPerc / 100);
+
             const receiptData = {
-                receiptNo: `RCP-${new Date(billData.reading_date).getFullYear()}-${billData.id || 'N/A'}`,
+                receiptNo: `RCP-${new Date(billData.reading_date || billData.updated_at).getFullYear()}-${String(billData.receipt_no || billData.bill_no || billData.id).padStart(4, '0')}`,
                 name: `${billData.customer.first_name} ${billData.customer.last_name}`,
+                isSenior: billData.customer.has_discount, // ADDED SENIOR FLAG
                 barangay: billData.customer.address ? extractBarangay(billData.customer.address) : 'N/A',
                 meter: billData.customer.meter_number,
                 prev: billData.previous_reading || 0,
@@ -1984,13 +2096,13 @@ async function viewHistoricalReceipt(billId) {
                 charges: {
                     base: billData.base_charge || 0,
                     consumption: billData.consumption_charge || 0,
-                    total: (billData.base_charge || 0) + (billData.consumption_charge || 0),
+                    total: currentCharges,
                     discount: billData.discount_amount || 0
                 },
                 arrears: billData.arrears || 0,
                 total: billData.amount || 0,
-                penalty: billData.penalty || 0,
-                penaltyPerc: systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20,
+                penalty: billData.penalty || calculatedPenalty,
+                penaltyPerc: penaltyPerc,
                 due: billData.due_date,
                 prevDate: prevBill ? prevBill.reading_date : 'N/A',
                 currentDate: billData.reading_date,

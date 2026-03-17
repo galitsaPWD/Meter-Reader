@@ -1,6 +1,6 @@
 {
-  "name": "iREAD H₂O",
-  "short_name": "iREAD H₂O",
+  "name": "iREAD H2O",
+  "short_name": "iREAD H2O",
   "description": "Progressive Web App for Pulupandan Water District Meter Readers",
   "start_url": "./index.html",
   "display": "standalone",

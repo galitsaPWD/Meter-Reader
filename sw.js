@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wb-reader-v29'; // Updated to force iREAD H₂O rename
+const CACHE_NAME = 'wb-reader-v29'; // Updated to force iREAD H2O rename
 const ASSETS = [
     './',
     './index.html',
