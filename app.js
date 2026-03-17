@@ -1383,11 +1383,11 @@ ${align("Consumption:", data.cons + " cu.m.")}
 ${align("Arrears:", "P" + (data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 ${align("Current Bill:", "P" + (data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}${data.isSenior ? `\n${align("Senior DC (5%):", "-P" + data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 }))}` : ''}
 --------------------------------
-${align("Amount Due:", "P" + data.total.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
+${align("AMOUNT DUE:", "P" + data.total.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 ${align("Penalty (" + data.penaltyPerc + "%):", "P" + penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
-
-${align("Amount After Due:", "P" + amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 (Due Date: ${dueStr})
+
+${align("AFTER DUE DATE:", "P" + amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 --------------------------------
 Reader: ${data.readerName}
 Thank you for being a valued customer!
@@ -1448,11 +1448,11 @@ ${align("Consumption:", data.cons + " cu.m.")}
 ${align("Arrears:", "P" + (data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 ${align("Current Bill:", "P" + (data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}${data.isSenior ? `\n${align("Senior DC (5%):", "-P" + data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 }))}` : ''}
 --------------------------------
-${align("Amount Due:", "P" + data.total.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
+${align("AMOUNT DUE:", "P" + data.total.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 ${align("Penalty (" + data.penaltyPerc + "%):", "P" + penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
-
-${align("Amount After Due:", "P" + amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 (Due Date: ${dueStr})
+
+${align("AFTER DUE DATE:", "P" + amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 --------------------------------
 Reader: ${data.readerName}
 Thank you for being a valued customer!
