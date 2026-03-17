@@ -1356,33 +1356,40 @@ window.shareReceipt = async () => {
     const presDateStr = new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
     const dueStr = new Date(data.due).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 
+    // Helper for right-aligning
+    const align = (label, value) => {
+        const totalLen = 32;
+        const spaces = totalLen - label.length - String(value).length;
+        return label + (spaces > 0 ? " ".repeat(spaces) : " ") + value;
+    };
+
     const text = `
 --------------------------------
 PULUPANDAN WATER DISTRICT
 OFFICIAL WATER BILL
 --------------------------------
-Reference No:     ${data.receiptNo}
-Date:             ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+${align("Reference No:", data.receiptNo)}
+${align("Date:", new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }))}
 
  Consumer: ${data.name}
  ${data.isSenior ? '(SENIOR)' : ''}
  Barangay: ${data.barangay || ''}
- Meter No: ${data.meter}
+ ${align("Meter No:", data.meter)}
 --------------------------------
-Prev. Reading:    ${data.prev}
+${align("Prev. Reading:", data.prev)}
 (${prevDateStr})
-Pres. Reading:    ${data.pres}
+${align("Pres. Reading:", data.pres)}
 (${presDateStr})
-Consumption:      ${data.cons} cu.m.
+${align("Consumption:", data.cons + " cu.m.")}
 --------------------------------
-Arrears:          P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Current Bill:     P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Senior DC:        ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
+${align("Arrears:", "P" + (data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
+${align("Current Bill:", "P" + (data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
+${align("Senior DC (5%):", data.charges.discount > 0 ? "-P" + data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : "P0.00")}
 --------------------------------
-Amount Due:       P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Penalty (${data.penaltyPerc}%):    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+${align("Amount Due:", "P" + data.total.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
+${align("Penalty (" + data.penaltyPerc + "%):", "P" + penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 
-Amount After Due: P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+${align("Amount After Due:", "P" + amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 (Due Date: ${dueStr})
 --------------------------------
 Reader: ${data.readerName}
@@ -1418,33 +1425,40 @@ window.directPrint = () => {
     const presDateStr = new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
     const dueStr = new Date(data.due).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 
+    // Helper for right-aligning
+    const align = (label, value) => {
+        const totalLen = 32;
+        const spaces = totalLen - label.length - String(value).length;
+        return label + (spaces > 0 ? " ".repeat(spaces) : " ") + value;
+    };
+
     const text = `
 --------------------------------
 PULUPANDAN WATER DISTRICT
 OFFICIAL WATER BILL
 --------------------------------
-Reference No:     ${data.receiptNo}
-Date:             ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+${align("Reference No:", data.receiptNo)}
+${align("Date:", new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }))}
 
  Consumer: ${data.name}
  ${data.isSenior ? '(SENIOR)' : ''}
  Barangay: ${data.barangay || ''}
- Meter No: ${data.meter}
+ ${align("Meter No:", data.meter)}
 --------------------------------
-Prev. Reading:    ${data.prev}
+${align("Prev. Reading:", data.prev)}
 (${prevDateStr})
-Pres. Reading:    ${data.pres}
+${align("Pres. Reading:", data.pres)}
 (${presDateStr})
-Consumption:      ${data.cons} cu.m.
+${align("Consumption:", data.cons + " cu.m.")}
 --------------------------------
-Arrears:          P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Current Bill:     P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Senior DC:        ${data.charges.discount > 0 ? `-P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'P0.00'}
+${align("Arrears:", "P" + (data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
+${align("Current Bill:", "P" + (data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }))}
+${align("Senior DC (5%):", data.charges.discount > 0 ? "-P" + data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : "P0.00")}
 --------------------------------
-Amount Due:       P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Penalty (${data.penaltyPerc}%):    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+${align("Amount Due:", "P" + data.total.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
+${align("Penalty (" + data.penaltyPerc + "%):", "P" + penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 
-Amount After Due: P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+${align("Amount After Due:", "P" + amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 }))}
 (Due Date: ${dueStr})
 --------------------------------
 Reader: ${data.readerName}
