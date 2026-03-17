@@ -1371,10 +1371,9 @@ OFFICIAL WATER BILL
 ${align("Reference No:", data.receiptNo)}
 ${align("Date:", new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }))}
 
- Consumer: ${data.name}
- ${data.isSenior ? '(SENIOR)' : ''}
- Barangay: ${data.barangay || ''}
- ${align("Meter No:", data.meter)}
+Consumer: ${data.name}${data.isSenior ? `\n(SENIOR)` : ''}
+Barangay: ${data.barangay || ''}
+${align("Meter No:", data.meter)}
 --------------------------------
 ${align("Prev. Reading:", data.prev)}
 (${prevDateStr})
@@ -1440,10 +1439,9 @@ OFFICIAL WATER BILL
 ${align("Reference No:", data.receiptNo)}
 ${align("Date:", new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }))}
 
- Consumer: ${data.name}
- ${data.isSenior ? '(SENIOR)' : ''}
- Barangay: ${data.barangay || ''}
- ${align("Meter No:", data.meter)}
+Consumer: ${data.name}${data.isSenior ? `\n(SENIOR)` : ''}
+Barangay: ${data.barangay || ''}
+${align("Meter No:", data.meter)}
 --------------------------------
 ${align("Prev. Reading:", data.prev)}
 (${prevDateStr})
