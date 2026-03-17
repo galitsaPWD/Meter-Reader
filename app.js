@@ -1350,6 +1350,7 @@ window.shareReceipt = async () => {
     if (!data) return;
 
     const penaltyAmount = data.penalty || 0;
+    const amountAfterDue = data.total + penaltyAmount;
     const prevDateParsed = data.prevDate ? new Date(data.prevDate) : null;
     const prevDateStr = (prevDateParsed && !isNaN(prevDateParsed)) ? prevDateParsed.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : 'N/A';
     const presDateStr = new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
@@ -1358,34 +1359,33 @@ window.shareReceipt = async () => {
     const text = `
 --------------------------------
 PULUPANDAN WATER DISTRICT
-Pulupandan, Negros Occidental
+Official Water Bill
 --------------------------------
-SERVICE INVOICE
+REFERENCE CODE
+${data.receiptNo}
 Date: ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
-Ref No: ${data.receiptNo}
+
+${data.name}${data.isSenior ? ' (SENIOR)' : ''}
+Brgy. ${data.barangay || ''}
+
+Meter Number:     ${data.meter}
+Prev Reading:     ${data.prev} (${prevDateStr})
+Pres Reading:     ${data.pres} (${presDateStr})
+Consumption:      ${data.cons} cu.m.
 --------------------------------
-Consumer: ${data.name}
-Address: Brgy. ${data.barangay || ''}
-Account No: ${data.meter}
+Arrears:          P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Current Bill:     P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+${data.charges.discount > 0 ? `Senior Discount (5%): -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}
+AMOUNT DUE:       P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Penalty (${data.penaltyPerc}%):    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+
+AFTER DUE DATE:   P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 --------------------------------
-the sum of: P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
---------------------------------
-in payment for:
-Current Bill: P${(data.charges.total - data.charges.discount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Arrears:      P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Penalty:      P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
---------------------------------
-Meter Details:
-Prev: ${data.prev} (${prevDateStr})
-Pres: ${data.pres} (${presDateStr})
-Cons: ${data.cons} cu.m.
---------------------------------
-TOTAL DUE: P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-DUE DATE : ${dueStr}
-AFTER DUE: P${(data.total + penaltyAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
---------------------------------
-Reader: ${data.readerName}
-Thank you!
+DUE DATE
+${dueStr}
+
+Meter Reader
+${data.readerName}
 --------------------------------
     `.trim();
 
@@ -1411,8 +1411,7 @@ window.directPrint = () => {
     if (!data) return;
 
     const penaltyAmount = data.penalty || 0;
-    
-    // Safely format the previous date, avoiding "Invalid Date"
+    const amountAfterDue = data.total + penaltyAmount;
     const prevDateParsed = data.prevDate ? new Date(data.prevDate) : null;
     const prevDateStr = (prevDateParsed && !isNaN(prevDateParsed)) ? prevDateParsed.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : 'N/A';
     const presDateStr = new Date(data.currentDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
@@ -1421,34 +1420,33 @@ window.directPrint = () => {
     const text = `
 --------------------------------
 PULUPANDAN WATER DISTRICT
-Pulupandan, Negros Occidental
+Official Water Bill
 --------------------------------
-SERVICE INVOICE
+REFERENCE CODE
+${data.receiptNo}
 Date: ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
-Ref No: ${data.receiptNo}
+
+${data.name}${data.isSenior ? ' (SENIOR)' : ''}
+Brgy. ${data.barangay || ''}
+
+Meter Number:     ${data.meter}
+Prev Reading:     ${data.prev} (${prevDateStr})
+Pres Reading:     ${data.pres} (${presDateStr})
+Consumption:      ${data.cons} cu.m.
 --------------------------------
-Consumer: ${data.name}
-Address: Brgy. ${data.barangay || ''}
-Account No: ${data.meter}
+Arrears:          P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Current Bill:     P${(data.charges.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+${data.charges.discount > 0 ? `Senior Discount (5%): -P${data.charges.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n` : ''}
+AMOUNT DUE:       P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+Penalty (${data.penaltyPerc}%):    P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+
+AFTER DUE DATE:   P${amountAfterDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
 --------------------------------
-the sum of: P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
---------------------------------
-in payment for:
-Current Bill: P${(data.charges.total - data.charges.discount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Arrears:      P${(data.arrears || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-Penalty:      P${penaltyAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
---------------------------------
-Meter Details:
-Prev: ${data.prev} (${prevDateStr})
-Pres: ${data.pres} (${presDateStr})
-Cons: ${data.cons} cu.m.
---------------------------------
-TOTAL DUE: P${data.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-DUE DATE : ${dueStr}
-AFTER DUE: P${(data.total + penaltyAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
---------------------------------
-Reader: ${data.readerName}
-Thank you!
+DUE DATE
+${dueStr}
+
+Meter Reader
+${data.readerName}
 --------------------------------
     `.trim();
 
