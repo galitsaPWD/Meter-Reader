@@ -603,6 +603,84 @@ section {
     color: #E65100;
 }
 
+.customer-card-condensed.is-editing {
+    border: 2px solid #1A73E8 !important;
+    background: #F0F7FF !important;
+    transform: scale(1.02);
+    box-shadow: 0 15px 35px rgba(26, 115, 232, 0.15);
+}
+
+.badge-editing {
+    font-size: 10px;
+    background: #DBEAFE;
+    color: #1E40AF;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-block;
+    margin-top: 4px;
+}
+
+.btn-correction-confirm {
+    background: linear-gradient(135deg, #1A73E8 0%, #1557B0 100%) !important;
+    box-shadow: 0 8px 25px rgba(26, 115, 232, 0.4) !important;
+}
+
+.btn-correction-cancel {
+    width: 100%;
+    height: 54px;
+    background: #F1F5F9 !important;
+    color: #64748B !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 18px !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    margin-top: 15px !important;
+    transition: all 0.2s ease !important;
+    cursor: pointer !important;
+}
+
+.btn-correction-cancel:active {
+    background: #E2E8F0 !important;
+    transform: scale(0.98);
+}
+
+.btn-correction-cancel i {
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.btn-receipt-edit {
+    display: none;
+    width: 100%;
+    height: 50px;
+    background: #FFF5F5 !important;
+    color: #E11D48 !important;
+    border: 1px dashed #FDA4AF !important;
+    border-radius: 16px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 15px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.btn-receipt-edit:active {
+    background: #FEE2E2 !important;
+    transform: scale(0.98);
+}
+
 .card-header-toggle {
     padding: 18px 24px;
     display: flex;

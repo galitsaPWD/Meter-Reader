@@ -5,6 +5,8 @@ let systemSettings = null;
 let rateSchedules = null;
 let isOnline = navigator.onLine;
 let isSyncInProgress = false;
+let editingCustomerId = null;
+let editingBillId = null;
 
 // IndexedDB Constants
 const DB_NAME = 'WBReaderDB';
@@ -12,6 +14,18 @@ const DB_VERSION = 2; // Incremented for new stores
 const STORE_NAME = 'readings';
 const STORE_AREAS = 'areas';
 const STORE_CUSTOMERS = 'customers';
+
+// Helper for consistent local YYYY-MM-DD strings (PH Time Friendly)
+function getLocalDateString() {
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const localDate = new Date(now.getTime() - (offset * 60 * 1000));
+    return localDate.toISOString().split('T')[0];
+}
+
+// Helper to strictly round to 2 decimal places (Fixes 999.8800000000001)
+const roundToTwo = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
+
 
 // Initialize IndexedDB
 async function openDB() {
@@ -77,6 +91,17 @@ async function saveCache(storeName, data) {
         const store = tx.objectStore(storeName);
         store.clear(); // Always replace cache with fresh data
         data.forEach(item => store.put(item));
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+async function putCache(storeName, item) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        store.put(item);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
     });
@@ -395,7 +420,7 @@ async function loadDashboard() {
             localStorage.setItem('sync_areas_time', Date.now()); // Mark sync time
 
             // 4. Today's Billing (for stats)
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = getLocalDateString();
             const { data: tb } = await supabase
                 .from('billing')
                 .select('consumption, reading_date, customer_id')
@@ -412,7 +437,7 @@ async function loadDashboard() {
             const { data: allBills } = await supabase
                 .from('billing')
                 .select('*')
-                .order('reading_date', { ascending: false });
+                .order('id', { ascending: false }); // Sort by ID to ensure latest is always first even for same date
 
             // Map billing to customers
             const billsByCustomer = {};
@@ -424,26 +449,53 @@ async function loadDashboard() {
             // Process and cache ALL customers
             const processedCustomers = (fullCustomers || []).map(c => {
                 const customerBills = billsByCustomer[c.id] || [];
-                const sortedBills = [...customerBills].sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date));
-                const latestBilling = sortedBills[0];
-                const arrears = customerBills.reduce((sum, b) => sum + (parseFloat(b.balance) || 0), 0);
+                // Sort by reading_date then id as fallback for same-day stability
+                const sortedBills = [...customerBills].sort((a, b) => {
+                    const dateDiff = new Date(b.reading_date) - new Date(a.reading_date);
+                    return dateDiff !== 0 ? dateDiff : b.id - a.id;
+                });
+                // Logic: Skip ALL bills from TODAY to find the "true" historical baseline
+                // for card display and input calculation.
+                const todayStr = getLocalDateString();
+                const historicalBills = (sortedBills || []).filter(b => !(b.reading_date || '').includes(todayStr));
+                const latestHistorical = historicalBills[0];
+
+                const arrears = roundToTwo(customerBills.reduce((sum, b) => sum + (parseFloat(b.balance) || 0), 0));
 
                 return {
                     ...c,
-                    previous_reading: latestBilling ? latestBilling.current_reading : 0,
+                    previous_reading: latestHistorical ? latestHistorical.current_reading : 0,
                     arrears: arrears,
                     category: (c.customer_type || 'residential').toLowerCase(),
+
                     meter_size: (c.meter_size || '1/2').replace(/"/g, ''),
                     history: sortedBills.slice(0, 12)
                 };
             });
 
             // Cache ALL customers for offline use (active + inactive for cutoff view)
-            await saveCache(STORE_CUSTOMERS, processedCustomers);
+            const existingCache = await getCache(STORE_CUSTOMERS);
+            
+            const mergedCustomers = processedCustomers.map(pc => {
+                const cached = (existingCache || []).find(ec => ec.id === pc.id);
+                if (cached && cached.history) {
+                    const localToday = cached.history.find(h => h.reading_date === todayStr);
+                    const serverToday = pc.history.find(h => h.reading_date === todayStr);
+                    
+                    if (localToday && !serverToday) {
+                        pc.history = [localToday, ...pc.history].slice(0, 12);
+                        // Also update properties that drive calculations
+                        pc.previous_reading = localToday.current_reading;
+                    }
+                }
+                return pc;
+            });
+
+            await saveCache(STORE_CUSTOMERS, mergedCustomers);
             localStorage.setItem('sync_customers_time', Date.now());
 
             // Use ONLY active customers for dashboard counts (matches what openArea loads)
-            allCustomers = processedCustomers
+            allCustomers = mergedCustomers
                 .filter(c => (c.status || 'active') === 'active')
                 .map(c => ({ id: c.id, address: c.address }));
 
@@ -485,7 +537,7 @@ async function loadDashboard() {
                 .map(c => ({ id: c.id, address: c.address, history: c.history || [] }));
 
             // Calculate "Today's Bills" from local history + unsynced readings
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = getLocalDateString();
             const offlineReadings = await getOfflineReadings();
 
             todayBills = [];
@@ -633,13 +685,18 @@ async function openArea(areaId, areaName, jumpToBrgy = 'All') {
 
             // Process customers immediately
             allCustomers = (data || []).map(c => {
-                const sortedBills = (c.billing || []).sort((a, b) => new Date(b.reading_date) - new Date(a.reading_date));
-                const latestBilling = sortedBills[0];
-                const arrears = (c.billing || []).reduce((sum, b) => sum + (parseFloat(b.balance) || 0), 0);
+                const sortedBills = (c.billing || []).sort((a, b) => {
+                    const dateDiff = new Date(b.reading_date) - new Date(a.reading_date);
+                    return dateDiff !== 0 ? dateDiff : b.id - a.id;
+                });
+                const todayStr = getLocalDateString();
+                const historicalBills = (sortedBills || []).filter(b => !(b.reading_date || '').includes(todayStr));
+                const latestHistorical = historicalBills[0];
+                const arrears = roundToTwo((c.billing || []).reduce((sum, b) => sum + (parseFloat(b.balance) || 0), 0));
 
                 return {
                     ...c,
-                    previous_reading: latestBilling ? latestBilling.current_reading : 0,
+                    previous_reading: latestHistorical ? latestHistorical.current_reading : 0,
                     arrears: arrears,
                     category: (c.customer_type || 'residential').toLowerCase(),
                     meter_size: (c.meter_size || '1/2').replace(/"/g, ''), // Clean 1/2" to 1/2
@@ -724,7 +781,7 @@ window.setBarangayFilter = (brgy, element) => {
 
 async function filterAndRenderCustomers() {
     const offlineReadings = await getOfflineReadings();
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString();
 
     const filtered = currentBarangay === 'All'
         ? currentAreaCustomers
@@ -754,13 +811,23 @@ function renderCustomerList(customers, offlineReadings = [], todayStr = '') {
     }
 
     container.innerHTML = customers.map(c => {
-        const isTodaySaved = c.history.some(b => b.reading_date === todayStr);
-        const isPending = offlineReadings.some(r => r.p_customer_id === c.id && r.p_month_date === todayStr);
+        // Robust date check (using local string and substring/inclusion to be safe)
+        const isTodaySaved = c.history.some(b => b.reading_date && b.reading_date.includes(todayStr));
+        const isPending = offlineReadings.some(r => r.p_month_date === todayStr);
+        const isEditing = editingCustomerId === c.id;
 
-        const cardClass = isTodaySaved ? 'is-saved' : (isPending ? 'is-pending' : '');
-        const statusLabel = isTodaySaved
-            ? '<span style="font-size: 10px; color: #388E3C; font-weight: 700;">RECORDED TODAY</span>'
-            : (isPending ? '<span style="font-size: 10px; color: #E65100; font-weight: 700;">PENDING SYNC</span>' : '');
+        const cardClass = isEditing ? 'is-editing' : (isTodaySaved ? 'is-saved' : (isPending ? 'is-pending' : ''));
+        const statusLabel = isEditing 
+            ? '<span class="badge-editing">EDITING MODE</span>'
+            : (isTodaySaved
+                ? '<span style="font-size: 10px; color: #388E3C; font-weight: 700;">RECORDED TODAY</span>'
+                : (isPending ? '<span style="font-size: 10px; color: #E65100; font-weight: 700;">PENDING SYNC</span>' : ''));
+
+
+
+        // DYNAMIC BASELINE: Ensure "Prev" always skips today's records during a correction session
+        const historicalBills = (c.history || []).filter(h => !(h.reading_date || '').includes(todayStr));
+        const dynamicPrev = historicalBills[0] ? (historicalBills[0].current_reading || 0) : (c.previous_reading || 0);
 
         return `
             <div class="customer-card-condensed ${cardClass}" id="cust-card-${c.id}">
@@ -780,7 +847,7 @@ function renderCustomerList(customers, offlineReadings = [], todayStr = '') {
                     <div class="detail-row">
                         <div class="previous-reading-badge-small">
                             <span class="label">Prev:</span>
-                            <span class="value">${c.previous_reading} cu.m.</span>
+                            <span class="value">${dynamicPrev} cu.m.</span>
                         </div>
                     </div>
                     
@@ -798,8 +865,8 @@ function renderCustomerList(customers, offlineReadings = [], todayStr = '') {
                         <input type="number" step="0.01" class="input-field reading-input" 
                             placeholder="Current Reading" 
                             id="reading-${c.id}" 
-                            ${isTodaySaved ? 'disabled' : ''}
-                            oninput="updateConsumption(${c.id}, ${c.previous_reading})">
+                            ${(isTodaySaved && !isEditing) ? 'disabled' : ''}
+                            oninput="updateConsumption(${c.id}, ${dynamicPrev})">
                         
                         <div class="reading-action-bar">
                             <div class="usage-display-compact" id="cons-card-${c.id}">
@@ -807,17 +874,26 @@ function renderCustomerList(customers, offlineReadings = [], todayStr = '') {
                                 <div class="value" id="cons-${c.id}">0.0 <span class="unit">cu.m.</span></div>
                             </div>
 
-                            <button onclick="submitReading(${c.id}, ${c.previous_reading}, ${c.has_discount}, ${c.arrears}, '${c.category}', '${c.meter_size}')" 
-                                    class="btn-save" ${isTodaySaved ? 'disabled' : ''}>
+                            <button onclick="submitReading(${c.id}, ${dynamicPrev}, ${c.has_discount}, ${c.arrears}, '${c.category}', '${c.meter_size}')" 
+                                    class="btn-save ${isEditing ? 'btn-correction-confirm' : ''}" 
+                                    ${(isTodaySaved && !isEditing) ? 'disabled' : ''}>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                                     <polyline points="20 6 9 17 4 12"></polyline>
                                 </svg>
-                                Confirm
+                                ${isEditing ? 'Confirm Correction' : 'Confirm'}
                             </button>
                         </div>
                     </div>
 
-                    ${isTodaySaved ? `
+                    ${isEditing ? `
+                        <button onclick="cancelEditing()" class="btn-correction-cancel">
+                            <i class="fa-solid fa-xmark"></i>
+                            Cancel Correction
+                        </button>
+                    ` : ''}
+
+
+                    ${(isTodaySaved && !isEditing) ? `
                         <button onclick="showReceiptShortcut(${c.id})" class="btn-small-outline" style="width: 100%; margin-top: 15px; display: flex; align-items: center; justify-content: center; gap: 8px;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -913,12 +989,16 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears, cate
     // Standardize to "Month Year" format
     const now = new Date();
     const billingPeriod = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-    const readingDate = now.toISOString().split('T')[0];
+    const readingDate = getLocalDateString();
 
     // Calculate Amount
     let charges;
-    let totalDue;
+    // Fetch latest arrears from memory to avoid stale parameter values from HTML binds
     const submittedCust = currentAreaCustomers.find(c => c.id === customerId);
+    // STRICT ROUNDING: Ensure activeArrears is clean before ANY calculation
+    const activeArrears = roundToTwo(submittedCust ? (parseFloat(submittedCust.arrears) || 0) : (parseFloat(arrears) || 0));
+
+    console.log(`DEBUG: Submission for ${customerId} - Param Arrears: ${arrears}, Active Arrears: ${activeArrears}`);
 
     try {
         // Use passed category/meterSize if available, fallback to object lookups
@@ -926,7 +1006,23 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears, cate
         const size = meterSize || submittedCust?.meter_size || '1/2';
         
         charges = calculateCharges(consumption, hasDiscount, { category: categoryKey, meter_size: size });
-        totalDue = charges.total + arrears;
+        
+        // STRICT ROUNDING: Round every step
+        charges.base = roundToTwo(charges.base);
+        charges.consumption = roundToTwo(charges.consumption);
+        charges.discount = roundToTwo(charges.discount);
+        charges.total = roundToTwo(charges.total);
+        
+        totalDue = roundToTwo(charges.total + activeArrears);
+        
+        console.table({
+            consumption,
+            gross_charges: roundToTwo(charges.base + charges.consumption),
+            discount: charges.discount,
+            net_charges: charges.total,
+            arrears: activeArrears,
+            final_total: totalDue
+        });
     } catch (calcErr) {
         console.error('Calc Error:', calcErr);
         showToast('Calculation error: rates not loaded. Refresh and try again.', 'error');
@@ -960,7 +1056,7 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears, cate
             p_consumption_charge: charges.consumption,
             p_penalty: 0,
             p_tax: 0,
-            p_arrears: arrears
+            p_arrears: activeArrears
         };
 
         if (!navigator.onLine) {
@@ -968,10 +1064,11 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears, cate
             const customerForReceipt = currentAreaCustomers.find(c => c.id === customerId) || {};
             const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20;
             // NEW PLAN: Penalty only on CURRENT bill amount (Base + Consumption), ignoring Arrears/Discount
-        const penalty = (charges.base + charges.consumption) * (penaltyPerc / 100);
+            const penalty = roundToTwo((charges.base + charges.consumption) * (penaltyPerc / 100));
 
             showReceipt({
-                receiptNo: `OFF-${Date.now().toString().slice(-6)}`,
+                receiptNo: `OFF-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`,
+
                 name: `${customerForReceipt.first_name || 'Customer'} ${customerForReceipt.last_name || ''}`,
                 barangay: extractBarangay(customerForReceipt.address),
                 meter: customerForReceipt.meter_number || 'N/A',
@@ -989,6 +1086,29 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears, cate
                 readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader'
             });
             return;
+        }
+
+        // 2. Handle Correction Case (Rollback)
+        if (editingCustomerId === customerId && editingBillId) {
+            showLoading(true, "Processing correction...");
+            const { data: rollbackData, error: rollbackError } = await supabase.rpc('rollback_reading', { 
+                p_bill_id: editingBillId,
+                p_staff_id: profile ? profile.id : null,
+                p_staff_name: profile ? `${profile.first_name} ${profile.last_name}` : 'Meter Reader',
+                p_role: profile ? profile.role : 'Reader'
+            });
+
+            if (rollbackError) throw rollbackError;
+            if (rollbackData && !rollbackData.success) throw new Error(rollbackData.error || "Failed to clear previous record.");
+            
+            // Clear local history for this customer before re-inserting
+            const cachedArr = await getCache(STORE_CUSTOMERS);
+            const targetIdx = (cachedArr || []).findIndex(c => c.id === customerId);
+            if (targetIdx !== -1) {
+                cachedArr[targetIdx].history = (cachedArr[targetIdx].history || []).filter(h => h.id !== editingBillId);
+                await saveCache(STORE_CUSTOMERS, cachedArr);
+                currentAreaCustomers = cachedArr;
+            }
         }
 
         const { data, error } = await supabase.rpc('generate_bill', rpcPayload);
@@ -1027,28 +1147,82 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears, cate
 
         // Correctly look up the customer from `currentAreaCustomers` to avoid data collision
         const submittedCust = currentAreaCustomers.find(c => c.id === customerId);
+        
+        // ULTRA-DEFENSIVE ID EXTRACTION
+        console.log('DEBUG: RPC Raw Data:', data);
+        const resObj = Array.isArray(data) ? data[0] : data;
+        const rpcBillId = parseInt(resObj?.bill_id || resObj?.id || (typeof data === 'number' ? data : null));
+        const rpcBillNo = resObj?.bill_no || resObj?.receipt_no || null;
+        
+        // Format Professional Reference Code (e.g., RCP-2026-0042)
+        const currentYear = new Date(readingDate).getFullYear();
+        const formattedRefCode = rpcBillNo ? `RCP-${currentYear}-${String(rpcBillNo).padStart(4, '0')}` : `RCP-${currentYear}-TEMP`;
+
+        console.log('DEBUG: Extracted Bill ID:', rpcBillId, 'Bill No:', rpcBillNo, 'Ref Code:', formattedRefCode);
+
+
         if (submittedCust) {
             if (!submittedCust.history) submittedCust.history = [];
+            // Remove any existing entry for today to avoid duplicates
             submittedCust.history = submittedCust.history.filter(h => h.reading_date !== readingDate);
+            
             submittedCust.history.unshift({
-                id: data.bill_id,
-                bill_no: data.bill_no,
+                id: rpcBillId,
+                bill_no: rpcBillNo,
                 reading_date: readingDate,
                 consumption: consumption,
                 current_reading: value,
-                balance: totalDue
+                balance: totalDue,
+                due_date: dueDateStr
             });
+
+            // Persist this specific customer ONLY to local cache
+            await putCache(STORE_CUSTOMERS, submittedCust);
         }
 
         showToast('Success!', 'success');
+
+        // NEW: Notify Admin of Correction Completion
+        if (editingCustomerId === customerId) {
+            const customer = currentAreaCustomers.find(c => c.id === customerId);
+            const staffName = profile ? `${profile.first_name} ${profile.last_name}` : 'Meter Reader';
+            const custName = customer ? `${customer.first_name} ${customer.last_name}` : 'Customer';
+            const role = profile ? profile.role : 'Reader';
+
+            // 1. Send Notification
+            supabase.from('notifications').insert({
+                type: 'bill_correction_complete',
+                message: `${staffName} completed correction for ${custName} (Ref: ${formattedRefCode})`,
+                staff_id: profile ? profile.id : null,
+                customer_id: customerId
+            }).then(({error}) => {
+                if (error) console.warn('Failed to send correction notification:', error);
+            });
+
+            // 2. Add to Audit Log
+            supabase.from('audit_logs').insert({
+                staff_id: profile ? profile.id : null,
+                staff_name: staffName,
+                role: role,
+                action_type: 'CORRECTION',
+                entity_type: 'billing',
+                entity_id: customerId.toString(),
+                details: `RE-SUBMIT (Correction): Reader ${staffName} finalized correction for ${custName}. Reference: ${formattedRefCode}`,
+                metadata: { bill_id: rpcBillId, bill_no: rpcBillNo, ref_code: formattedRefCode, prev_reading: prevReading, pres_reading: value }
+            }).then(({error}) => {
+                if (error) console.warn('Failed to audit correction completion:', error);
+            });
+        }
+
         finalizeInput(customerId);
 
+
         const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20;
-        // NEW PLAN: Penalty on Gross Current charges
         const penalty = (charges.base + charges.consumption) * (penaltyPerc / 100);
 
         showReceipt({
-            receiptNo: `RCP-${new Date().getFullYear()}-${String(data.bill_no || data.bill_id).padStart(4, '0')}`,
+            receiptNo: formattedRefCode,
+
             name: submittedCust ? `${submittedCust.first_name} ${submittedCust.last_name}` : 'Customer',
             barangay: submittedCust ? extractBarangay(submittedCust.address) : 'N/A',
             meter: submittedCust ? submittedCust.meter_number : 'N/A',
@@ -1056,15 +1230,22 @@ async function submitReading(customerId, prevReading, hasDiscount, arrears, cate
             pres: value,
             cons: consumption,
             charges: charges,
-            arrears: arrears,
-            total: totalDue, // Pure total without penalty added twice
+            arrears: activeArrears,
+            total: totalDue,
             penalty: penalty,
             penaltyPerc: penaltyPerc,
             due: dueDateStr,
             prevDate: (submittedCust.history && submittedCust.history[1]) ? submittedCust.history[1].reading_date : (submittedCust.history && submittedCust.history[0] ? submittedCust.history[0].reading_date : 'N/A'),
             currentDate: readingDate,
-            readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader'
+            readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader',
+            canEdit: true, 
+            billId: rpcBillId, // ALWAYS use the numeric ID for subsequent RPCs
+            customerId: customerId
         });
+
+        // Clear editing state
+        editingCustomerId = null;
+        editingBillId = null;
 
         await loadDashboard();
         await filterAndRenderCustomers();
@@ -1246,7 +1427,7 @@ function showReceipt(data) {
         <div style="text-align: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">
             <div style="font-size: 11px; color: #666; text-transform: uppercase; font-weight: 600; margin-bottom: 2px;">Reference Code</div>
             <div style="font-size: 18px; font-weight: 800; color: #000;">${data.receiptNo}</div>
-            <div style="font-size: 11px; color: #888; margin-top: 2px;">Date: ${formatMdy(new Date())}</div>
+            <div style="font-size: 11px; color: #888; margin-top: 4px;">Date: ${formatMdy(data.currentDate || new Date())}</div>
         </div>
 
         <!-- CONSUMER SECTION -->
@@ -1338,6 +1519,19 @@ function showReceipt(data) {
             <div style="font-weight: 700; color: #333; margin-top: 4px;">${data.readerName}</div>
         </div>
     `;
+    
+    // Toggle Edit Button
+    const editBtn = document.getElementById('editReceiptBtn');
+    if (editBtn) {
+        if (data.canEdit && data.billId) {
+            editBtn.style.display = 'flex';
+            editBtn.onclick = () => triggerEditReceipt(data.billId, data.customerId);
+        } else {
+            editBtn.style.display = 'none';
+            editBtn.onclick = null;
+        }
+    }
+
     document.getElementById('receipt-modal').classList.remove('hidden');
 
     // Store data for shareReceipt
@@ -1467,10 +1661,46 @@ window.closeReceipt = () => {
     document.getElementById('receipt-modal').classList.add('hidden');
 };
 
+window.triggerEditReceipt = (billId, customerId) => {
+    editingCustomerId = customerId;
+    editingBillId = billId;
+    
+    closeReceipt();
+    
+    // IMPORTANT: Re-render the list to show the "Editing Mode" card
+    filterAndRenderCustomers();
+    
+    // Expand the customer card and focus input
+    setTimeout(() => {
+            const details = document.getElementById(`details-${customerId}`);
+            const card = document.getElementById(`cust-card-${customerId}`);
+            
+            if (details) {
+                details.classList.remove('hidden');
+                if (card) card.classList.add('expanded');
+            }
+            
+            const input = document.getElementById(`reading-${customerId}`);
+            if (input) {
+                input.value = ''; // Clear it for re-entry
+                input.disabled = false;
+                input.focus();
+                input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 300);
+};
+
+window.cancelEditing = () => {
+    editingCustomerId = null;
+    editingBillId = null;
+    filterAndRenderCustomers();
+    showToast("Correction cancelled", "info");
+};
+
 window.showReceiptShortcut = (id) => {
     const customer = currentAreaCustomers.find(c => c.id === id);
-    const todayStr = new Date().toISOString().split('T')[0];
-    const bill = customer.history.find(b => b.reading_date === todayStr);
+    const todayStr = getLocalDateString();
+    const bill = customer.history.find(b => b.reading_date && b.reading_date.includes(todayStr));
 
     if (bill) {
         const charges = calculateCharges(bill.consumption, customer.has_discount);
@@ -1484,7 +1714,7 @@ window.showReceiptShortcut = (id) => {
         const prevBill = currentIdx !== -1 ? sortedHistory[currentIdx + 1] : null;
 
         showReceipt({
-            receiptNo: `RCP-${new Date(bill.reading_date || new Date()).getFullYear()}-${String(bill.receipt_no || bill.bill_no || bill.id).padStart(4, '0')}`,
+            receiptNo: `RCP-${new Date(bill.reading_date || new Date()).getFullYear()}-${String(bill.bill_no || bill.id || bill.bill_id).padStart(4, '0')}`,
             name: `${customer.first_name} ${customer.last_name}`,
             isSenior: customer.has_discount, // ADDED SENIOR FLAG
             barangay: extractBarangay(customer.address),
@@ -1500,7 +1730,10 @@ window.showReceiptShortcut = (id) => {
             due: bill.due_date || 'N/A',
             prevDate: prevBill ? prevBill.reading_date : 'N/A',
             currentDate: bill.reading_date,
-            readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader'
+            readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader',
+            canEdit: (bill.status !== 'paid' && bill.reading_date && bill.reading_date.includes(todayStr)),
+            billId: bill.id,
+            customerId: customer.id
         });
     }
 };
@@ -1652,6 +1885,10 @@ async function updateSyncCount() {
 // === NAVIGATION SYSTEM ===
 function switchView(viewId) {
     console.log(`Switching View to: ${viewId}`);
+
+    // Clear Editing State on Navigation
+    editingCustomerId = null;
+    editingBillId = null;
 
     // Update View Visibility
     const views = document.querySelectorAll('.app-view');
@@ -2079,13 +2316,13 @@ async function viewHistoricalReceipt(billId) {
             const currentIdx = history.findIndex(h => h.id == billData.id || h.reading_date === billData.reading_date);
             const prevBill = currentIdx !== -1 ? history[currentIdx + 1] : null;
 
-            // Live Penalty Calculation
+            // Live Penalty & Discount Calculation
+            const charges = calculateCharges(billData.consumption || 0, billData.customer.has_discount, billData.customer);
             const penaltyPerc = systemSettings ? (parseFloat(systemSettings.penalty_percentage) || 20) : 20;
-            const currentCharges = (billData.base_charge || 0) + (billData.consumption_charge || 0);
-            const calculatedPenalty = currentCharges * (penaltyPerc / 100);
+            const calculatedPenalty = (charges.base + charges.consumption) * (penaltyPerc / 100);
 
             const receiptData = {
-                receiptNo: `RCP-${new Date(billData.reading_date || billData.updated_at).getFullYear()}-${String(billData.receipt_no || billData.bill_no || billData.id).padStart(4, '0')}`,
+                receiptNo: `RCP-${new Date(billData.reading_date || new Date()).getFullYear()}-${String(billData.bill_no || billData.id || billData.bill_id).padStart(4, '0')}`,
                 name: `${billData.customer.first_name} ${billData.customer.last_name}`,
                 isSenior: billData.customer.has_discount, // ADDED SENIOR FLAG
                 barangay: billData.customer.address ? extractBarangay(billData.customer.address) : 'N/A',
@@ -2093,20 +2330,18 @@ async function viewHistoricalReceipt(billId) {
                 prev: billData.previous_reading || 0,
                 pres: billData.current_reading || 0,
                 cons: billData.consumption || 0,
-                charges: {
-                    base: billData.base_charge || 0,
-                    consumption: billData.consumption_charge || 0,
-                    total: currentCharges,
-                    discount: billData.discount_amount || 0
-                },
+                charges: charges,
                 arrears: billData.arrears || 0,
-                total: billData.amount || 0,
+                total: billData.amount || charges.total + (billData.arrears || 0),
                 penalty: billData.penalty || calculatedPenalty,
                 penaltyPerc: penaltyPerc,
                 due: billData.due_date,
                 prevDate: prevBill ? prevBill.reading_date : 'N/A',
                 currentDate: billData.reading_date,
-                readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader'
+                readerName: profile ? `${profile.first_name} ${profile.last_name}` : 'Reader',
+                canEdit: ((billData.status || 'unpaid').toLowerCase() !== 'paid' && billData.reading_date && billData.reading_date.includes(getLocalDateString())),
+                billId: billData.id,
+                customerId: billData.customer_id || (billData.customer ? billData.customer.id : null)
             };
             showReceipt(receiptData);
         } else {
